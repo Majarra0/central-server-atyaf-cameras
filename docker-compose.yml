@@ -1,0 +1,24 @@
+services:
+
+  frps:
+    image: snowdreamtech/frps:latest
+    container_name: frps
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./frp/frps.toml:/etc/frp/frps.toml:ro
+
+  dashboard:
+    build: .
+    container_name: central-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - dashboard-faces:/app/backend/faces
+      - ./backend/sites.json:/app/backend/sites.json
+    depends_on:
+      - frps
+
+volumes:
+  dashboard-faces:

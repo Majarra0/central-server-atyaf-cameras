@@ -1,0 +1,8 @@
+[
+  {
+    "id": "site1",
+    "branch": "الفرع الرئيسي",
+    "frigateUrl": "http://localhost:15001",
+    "cameras": ["cam1", "cam2"]
+  }
+]

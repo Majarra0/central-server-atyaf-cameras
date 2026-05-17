@@ -1,0 +1,15 @@
+# ── frp SERVER config (runs on the remote public server) ─────────────────────
+# Place this file at /etc/frp/frps.toml inside the frps container (see
+# docker-compose.remote.yml).  Only ports 7000 (tunnel) and 3000 (dashboard)
+# need to be open on the server firewall.
+
+bindPort = 7000
+
+auth.method = "token"
+auth.token  = "CHANGE_THIS_TO_A_STRONG_SECRET"
+
+# Optional admin web-UI for frp itself (shows tunnel status)
+webServer.addr     = "127.0.0.1"
+webServer.port     = 7500
+webServer.user     = "admin"
+webServer.password = "CHANGE_THIS_TOO"

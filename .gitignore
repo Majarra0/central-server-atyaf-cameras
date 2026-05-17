@@ -1,0 +1,5 @@
+backend/node_modules/
+backend/employees.db
+backend/faces/
+*.db
+.env
