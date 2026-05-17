@@ -1,7 +1,7 @@
 // ── State ─────────────────────────────────────────────────────────────────────
-let sites        = [];
-let snapTimers   = {};   // siteId+camera → intervalId
-let activeTab    = 'upload';
+let sites      = [];
+let snapTimers = {};
+let activeTab  = 'live';
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (async () => {
@@ -10,7 +10,21 @@ let activeTab    = 'upload';
   initEventsTab();
   bindTabs();
   bindModals();
+  startClock();
+  // Render live grid immediately (it's the default tab)
+  renderLiveGrid();
 })();
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function startClock() {
+  const el = document.getElementById('clock');
+  const tick = () => {
+    const now = new Date();
+    el.textContent = now.toLocaleTimeString('ar-SA', { hour12: false });
+  };
+  tick();
+  setInterval(tick, 1000);
+}
 
 // ── Sites ─────────────────────────────────────────────────────────────────────
 async function loadSites() {
@@ -24,7 +38,7 @@ async function loadSites() {
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 function bindTabs() {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
+  document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 }
@@ -32,7 +46,7 @@ function bindTabs() {
 function switchTab(name) {
   activeTab = name;
 
-  document.querySelectorAll('.tab-btn').forEach(b =>
+  document.querySelectorAll('.nav-item').forEach(b =>
     b.classList.toggle('active', b.dataset.tab === name)
   );
   document.querySelectorAll('.tab-pane').forEach(p =>
@@ -50,16 +64,14 @@ function switchTab(name) {
 // UPLOAD TAB
 // ══════════════════════════════════════════════════════════════════════════════
 function initUploadTab() {
-  // Populate branch dropdown from sites
   const sel = document.getElementById('branch');
   sites.forEach(s => {
     const opt = document.createElement('option');
-    opt.value       = s.branch;
+    opt.value = s.branch;
     opt.textContent = s.branch;
     sel.appendChild(opt);
   });
 
-  // File preview
   const fileInput = document.getElementById('picture');
   const fileName  = document.getElementById('fileName');
   const fileDrop  = document.getElementById('fileDrop');
@@ -71,11 +83,15 @@ function initUploadTab() {
     fileName.textContent = file.name;
     fileDrop.classList.add('active');
     const reader = new FileReader();
-    reader.onload = e => { preview.src = e.target.result; preview.classList.remove('hidden'); };
+    reader.onload = e => {
+      preview.src = e.target.result;
+      preview.classList.remove('hidden');
+    };
     reader.readAsDataURL(file);
   });
 
-  // Submit
+  // The form wraps the hidden submit trigger; inputs are outside it,
+  // so we build FormData manually.
   const form      = document.getElementById('uploadForm');
   const submitBtn = document.getElementById('submitBtn');
   const msgEl     = document.getElementById('uploadMsg');
@@ -86,21 +102,36 @@ function initUploadTab() {
 
     const employeeId = document.getElementById('employee_id').value.trim();
     const branch     = document.getElementById('branch').value;
+    const file       = fileInput.files[0];
 
     if (!employeeId || !branch) return showMsg(msgEl, 'error', 'يرجى تعبئة جميع الحقول');
-    if (!fileInput.files[0])   return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
+    if (!file)                  return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
 
-    submitBtn.disabled    = true;
-    submitBtn.textContent = 'جارٍ الرفع...';
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           style="animation:spin .8s linear infinite">
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"
+              stroke-linecap="round"/>
+      </svg>
+      جارٍ الرفع...
+    `;
+
+    const fd = new FormData();
+    fd.append('employee_id', employeeId);
+    fd.append('branch',      branch);
+    fd.append('picture',     file);
 
     try {
-      const res  = await fetch('/api/upload', { method: 'POST', body: new FormData(form) });
+      const res  = await fetch('/api/upload', { method: 'POST', body: fd });
       const data = await res.json();
 
       if (res.ok) {
         showMsg(msgEl, 'success', data.message);
-        form.reset();
-        fileName.textContent = 'اضغط لاختيار صورة';
+        document.getElementById('employee_id').value = '';
+        document.getElementById('branch').value      = '';
+        fileInput.value                               = '';
+        fileName.textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
         fileDrop.classList.remove('active');
         preview.classList.add('hidden');
         preview.src = '';
@@ -110,8 +141,14 @@ function initUploadTab() {
     } catch {
       showMsg(msgEl, 'error', 'تعذّر الاتصال بالخادم');
     } finally {
-      submitBtn.disabled    = false;
-      submitBtn.textContent = 'رفع الصورة';
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        رفع وتسجيل الصورة
+      `;
     }
   });
 }
@@ -124,7 +161,14 @@ function renderLiveGrid() {
   const grid = document.getElementById('liveGrid');
 
   if (!sites.length) {
-    grid.innerHTML = '<div class="placeholder">لا يوجد فروع مضافة في sites.json</div>';
+    grid.innerHTML = `
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 8v4M12 16h.01" stroke-linecap="round"/>
+        </svg>
+        <span>لا يوجد فروع مضافة — أضف الفروع في ملف sites.json</span>
+      </div>`;
     return;
   }
 
@@ -135,10 +179,19 @@ function renderLiveGrid() {
     block.className = 'site-block';
     block.innerHTML = `
       <div class="site-header">
-        <span class="site-name">${esc(site.branch)}</span>
-        <div class="site-actions">
-          <span class="badge loading" id="badge-${site.id}">جارٍ الفحص...</span>
-          <button class="btn-sm" onclick="openSiteFrigate('${site.id}')">فتح واجهة فريجيت</button>
+        <div class="site-header-left">
+          <span class="site-dot" id="dot-${site.id}"></span>
+          <span class="site-name">${esc(site.branch)}</span>
+          <span class="badge loading" id="badge-${site.id}">فحص...</span>
+        </div>
+        <div class="site-header-right">
+          <button class="action-btn" onclick="openSiteFrigate('${site.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            فتح فريجيت
+          </button>
         </div>
       </div>
       <div class="cam-grid" id="cams-${site.id}"></div>
@@ -150,25 +203,29 @@ function renderLiveGrid() {
   });
 
   document.getElementById('refreshStatusBtn').onclick = () => {
-    sites.forEach(site => checkStatus(site));
+    sites.forEach(s => checkStatus(s));
   };
 }
 
 async function checkStatus(site) {
   const badge = document.getElementById(`badge-${site.id}`);
+  const dot   = document.getElementById(`dot-${site.id}`);
   try {
     const r    = await fetch(`/api/sites/${site.id}/status`);
     const data = await r.json();
     if (data.online) {
       badge.className   = 'badge online';
-      badge.textContent = `متصل${data.version ? ' · ' + data.version : ''}`;
+      badge.textContent = data.version ? `v${data.version}` : 'متصل';
+      if (dot) dot.className = 'site-dot online';
     } else {
       badge.className   = 'badge offline';
       badge.textContent = 'غير متصل';
+      if (dot) dot.className = 'site-dot offline';
     }
   } catch {
     badge.className   = 'badge offline';
     badge.textContent = 'غير متصل';
+    if (dot) dot.className = 'site-dot offline';
   }
 }
 
@@ -179,20 +236,40 @@ function addCameraCell(site, cam) {
   cell.id = `cell-${site.id}-${cam}`;
 
   cell.innerHTML = `
-    <img id="snap-${site.id}-${cam}" src="" alt="${esc(cam)}"
-         onerror="this.parentNode.querySelector('.cam-offline').style.display='flex';this.style.display='none'">
+    <img id="snap-${site.id}-${cam}" src="" alt="${esc(cam)}">
+    <div class="cam-reticle"></div>
     <div class="cam-offline" style="display:none">
-      <span style="font-size:1.8rem">📷</span>
-      <span>لا يوجد بث</span>
+      <svg class="cam-offline-icon" width="32" height="32" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="1">
+        <path d="M15 10l4.553-2.069A1 1 0 0121 8.951V15.05a1 1 0 01-1.447.89L15 14
+                 M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z
+                 M3 3l18 18" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>لا توجد إشارة</span>
     </div>
-    <div class="cam-label">
-      <span>${esc(cam)}</span>
-      <button class="live-btn" onclick="openLiveStream('${site.id}','${cam}','${esc(site.branch)}')">
+    <div class="cam-bar">
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <div class="live-badge">
+          <span class="live-badge-dot"></span>
+          LIVE
+        </div>
+        <span class="cam-name">${esc(cam.toUpperCase())}</span>
+      </div>
+      <button class="stream-btn"
+              onclick="openLiveStream('${site.id}','${cam}','${esc(site.branch)}')">
         بث مباشر
       </button>
     </div>
   `;
   container.appendChild(cell);
+
+  const img     = cell.querySelector(`#snap-${site.id}-${cam}`);
+  const offline = cell.querySelector('.cam-offline');
+
+  img.onerror = () => {
+    img.style.display     = 'none';
+    offline.style.display = 'flex';
+  };
 
   startSnapshot(site.id, cam);
 }
@@ -200,18 +277,17 @@ function addCameraCell(site, cam) {
 function startSnapshot(siteId, cam) {
   const key = `${siteId}-${cam}`;
   const refresh = () => {
-    const img = document.getElementById(`snap-${siteId}-${cam}`);
+    const img     = document.getElementById(`snap-${siteId}-${cam}`);
+    const offline = img?.parentNode?.querySelector('.cam-offline');
     if (!img) { clearInterval(snapTimers[key]); return; }
-    const offlineEl = img.parentNode.querySelector('.cam-offline');
 
-    const newImg    = new Image();
-    newImg.onload   = () => {
-      img.src               = newImg.src;
-      img.style.display     = '';
-      if (offlineEl) offlineEl.style.display = 'none';
+    const next  = new Image();
+    next.onload = () => {
+      img.src            = next.src;
+      img.style.display  = '';
+      if (offline) offline.style.display = 'none';
     };
-    // onerror keeps offline div visible — do nothing extra
-    newImg.src = `/api/sites/${siteId}/snapshot/${encodeURIComponent(cam)}?t=${Date.now()}`;
+    next.src = `/api/sites/${siteId}/snapshot/${encodeURIComponent(cam)}?t=${Date.now()}`;
   };
 
   refresh();
@@ -223,28 +299,28 @@ function stopAllSnapshots() {
   snapTimers = {};
 }
 
-// Open full Frigate UI through the transparent proxy
 window.openSiteFrigate = function(siteId) {
   openStreamModal(`/proxy/${siteId}/`, `واجهة فريجيت — ${getBranch(siteId)}`);
 };
 
 window.openLiveStream = function(siteId, cam, branchLabel) {
-  // Open go2rtc's stream player through the proxy
-  openStreamModal(`/proxy/${siteId}/?cameras=${encodeURIComponent(cam)}`, `${branchLabel} · ${cam}`);
+  openStreamModal(
+    `/proxy/${siteId}/?cameras=${encodeURIComponent(cam)}`,
+    `${branchLabel} · ${cam}`
+  );
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
 // EVENTS TAB
 // ══════════════════════════════════════════════════════════════════════════════
 function initEventsTab() {
-  const siteSel   = document.getElementById('evtSite');
-  const camSel    = document.getElementById('evtCamera');
-  const loadBtn   = document.getElementById('loadEventsBtn');
+  const siteSel = document.getElementById('evtSite');
+  const camSel  = document.getElementById('evtCamera');
+  const loadBtn = document.getElementById('loadEventsBtn');
 
-  // Populate site dropdown
   sites.forEach(s => {
     const opt = document.createElement('option');
-    opt.value       = s.id;
+    opt.value = s.id;
     opt.textContent = s.branch;
     siteSel.appendChild(opt);
   });
@@ -263,75 +339,84 @@ function initEventsTab() {
 
   loadBtn.addEventListener('click', () => {
     const siteId = siteSel.value;
-    const cam    = camSel.value;
     if (!siteId) return;
-    loadEvents(siteId, cam);
+    loadEvents(siteId, camSel.value);
   });
 }
 
 async function loadEvents(siteId, camera) {
   const grid = document.getElementById('eventsGrid');
-  grid.innerHTML = '<div class="placeholder">جارٍ التحميل...</div>';
+  grid.innerHTML = `
+    <div class="empty-state">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"
+           style="animation:spin .9s linear infinite">
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"
+              stroke-linecap="round"/>
+      </svg>
+      <span>جارٍ التحميل...</span>
+    </div>`;
 
   const params = new URLSearchParams({ limit: 40, has_snapshot: 1 });
   if (camera) params.set('camera', camera);
 
   try {
-    const r     = await fetch(`/api/sites/${siteId}/events?${params}`);
+    const r      = await fetch(`/api/sites/${siteId}/events?${params}`);
     const events = await r.json();
 
     if (!Array.isArray(events) || !events.length) {
-      grid.innerHTML = '<div class="placeholder">لا توجد أحداث</div>';
+      grid.innerHTML = `
+        <div class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2
+                     M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+          <span>لا توجد أحداث لهذا الفرع</span>
+        </div>`;
       return;
     }
 
     grid.innerHTML = '';
     events.forEach(ev => grid.appendChild(buildEventCard(siteId, ev)));
-
   } catch {
-    grid.innerHTML = '<div class="placeholder">تعذّر تحميل الأحداث — تحقق من اتصال الفرع</div>';
+    grid.innerHTML = `
+      <div class="empty-state">
+        <span>تعذّر التواصل مع الفرع — تحقق من اتصال النفق</span>
+      </div>`;
   }
 }
 
 function buildEventCard(siteId, ev) {
-  const card  = document.createElement('div');
+  const card = document.createElement('div');
   card.className = 'event-card';
 
-  const subLabel  = Array.isArray(ev.sub_label) ? ev.sub_label[0] : (ev.sub_label || '');
-  const score     = Array.isArray(ev.sub_label) && ev.sub_label[1]
-                    ? ` (${Math.round(ev.sub_label[1] * 100)}%)`
-                    : '';
-  const name      = subLabel || 'غير معروف';
-  const timeStr   = ev.start_time
-                    ? new Date(ev.start_time * 1000).toLocaleString('ar-SA')
-                    : '';
-  const snapUrl   = `/api/sites/${siteId}/events/${ev.id}/snapshot`;
-  const clipUrl   = `/api/sites/${siteId}/events/${ev.id}/clip`;
-  const hasClip   = ev.has_clip;
+  const subLabel = Array.isArray(ev.sub_label) ? ev.sub_label[0] : (ev.sub_label || '');
+  const score    = Array.isArray(ev.sub_label) && ev.sub_label[1]
+                   ? ` (${Math.round(ev.sub_label[1] * 100)}%)` : '';
+  const name     = subLabel || 'غير معروف';
+  const timeStr  = ev.start_time
+                   ? new Date(ev.start_time * 1000).toLocaleString('ar-SA') : '';
+  const snapUrl  = `/api/sites/${siteId}/events/${ev.id}/snapshot`;
+  const clipUrl  = `/api/sites/${siteId}/events/${ev.id}/clip`;
 
   card.innerHTML = `
-    <img class="event-thumb" src="${snapUrl}" alt="لقطة" loading="lazy"
-         onerror="this.style.background='#d1d5db'">
-    <div class="event-info">
+    <img class="event-thumb" src="${snapUrl}" alt="لقطة" loading="lazy">
+    <div class="event-body">
       <div class="event-name" title="${esc(name + score)}">${esc(name)}${score}</div>
-      <div class="event-meta">
-        <span>${esc(ev.camera || '')}</span>
-        <span>${timeStr}</span>
+      <div class="event-row">
+        <span class="event-cam">${esc(ev.camera || '')}</span>
+        <span class="event-time">${timeStr}</span>
       </div>
       <div class="event-actions">
-        <button onclick="openSnapModal('${snapUrl}','${esc(name)}','${timeStr}','${esc(ev.camera || '')}')">
+        <button class="evt-btn"
+                onclick="openSnapModal('${snapUrl}','${esc(name)}','${timeStr}','${esc(ev.camera || '')}')">
           عرض الصورة
         </button>
-        ${hasClip ? `<a href="${clipUrl}" download class="dl-btn event-actions button"
-            style="flex:1;text-align:center;padding:.3rem .4rem;font-size:.75rem;
-                   border:1.5px solid var(--accent);border-radius:6px;color:var(--accent);
-                   text-decoration:none;display:inline-block">
-            تحميل المقطع
-          </a>` : ''}
+        ${ev.has_clip
+          ? `<a href="${clipUrl}" download class="evt-btn dl">تحميل المقطع</a>`
+          : ''}
       </div>
     </div>
   `;
-
   return card;
 }
 
@@ -367,7 +452,8 @@ function closeStreamModal() {
 
 window.openSnapModal = function(src, name, time, cam) {
   document.getElementById('snapImg').src = src;
-  document.getElementById('snapMeta').textContent = [name, cam, time].filter(Boolean).join(' · ');
+  document.getElementById('snapMeta').textContent =
+    [name, cam, time].filter(Boolean).join('  ·  ');
   document.getElementById('snapModal').classList.remove('hidden');
 };
 
@@ -379,8 +465,8 @@ function closeSnapModal() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function esc(str) {
   return String(str)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function getBranch(siteId) {
@@ -389,11 +475,11 @@ function getBranch(siteId) {
 }
 
 function showMsg(el, type, text) {
-  el.className     = `msg ${type}`;
-  el.textContent   = text;
+  el.className   = `upload-msg ${type}`;
+  el.textContent = text;
 }
 
 function hideMsg(el) {
-  el.className   = 'msg hidden';
+  el.className   = 'upload-msg hidden';
   el.textContent = '';
 }

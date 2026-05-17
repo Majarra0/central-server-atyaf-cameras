@@ -3,109 +3,267 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>لوحة المراقبة المركزية</title>
+  <title>نظام المراقبة المركزي</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="app">
 
-  <header class="top-bar">
-    <span class="logo-text">لوحة المراقبة المركزية</span>
-    <nav class="tabs">
-      <button class="tab-btn active" data-tab="upload">رفع الصور</button>
-      <button class="tab-btn"        data-tab="live">المراقبة المباشرة</button>
-      <button class="tab-btn"        data-tab="events">سجل الأحداث</button>
-    </nav>
-  </header>
-
-  <!-- ── UPLOAD TAB ─────────────────────────────────────────────────────── -->
-  <div id="tab-upload" class="tab-pane active">
-    <div class="card upload-card">
-      <h2>رفع صورة موظف</h2>
-      <p class="sub">ربط صورة الموظف بفرعه وإضافتها لمكتبة التعرف</p>
-
-      <form id="uploadForm" enctype="multipart/form-data" novalidate>
-
-        <div class="field">
-          <label for="employee_id">رقم الموظف</label>
-          <input type="text" id="employee_id" name="employee_id"
-                 placeholder="مثال: HR-EMP-00001" autocomplete="off" required>
-        </div>
-
-        <div class="field">
-          <label for="branch">الفرع</label>
-          <select id="branch" name="branch" required>
-            <option value="" disabled selected>اختر الفرع...</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>الصورة</label>
-          <label for="picture" class="file-drop" id="fileDrop">
-            <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" fill="none"
-                 viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021
-                       18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
-            </svg>
-            <span id="fileName">اضغط لاختيار صورة</span>
-            <span class="hint">PNG · JPG · WEBP — حتى 10 MB</span>
-          </label>
-          <input type="file" id="picture" name="picture" accept="image/*" required>
-          <img id="preview" class="preview hidden" alt="معاينة">
-        </div>
-
-        <button type="submit" id="submitBtn">رفع الصورة</button>
-      </form>
-
-      <div id="uploadMsg" class="msg hidden"></div>
-    </div>
-  </div>
-
-  <!-- ── LIVE TAB ───────────────────────────────────────────────────────── -->
-  <div id="tab-live" class="tab-pane hidden">
-    <div class="toolbar">
-      <span class="toolbar-title">المراقبة المباشرة</span>
-      <button class="btn-sm" id="refreshStatusBtn">تحديث الحالة</button>
-    </div>
-    <div id="liveGrid" class="live-grid">
-      <div class="placeholder">جارٍ تحميل الفروع...</div>
-    </div>
-  </div>
-
-  <!-- ── EVENTS TAB ─────────────────────────────────────────────────────── -->
-  <div id="tab-events" class="tab-pane hidden">
-    <div class="toolbar">
-      <span class="toolbar-title">سجل الأحداث</span>
-      <div class="filters">
-        <select id="evtSite"><option value="">— اختر الفرع —</option></select>
-        <select id="evtCamera"><option value="">جميع الكاميرات</option></select>
-        <button class="btn-sm" id="loadEventsBtn">تحميل</button>
+  <!-- ═══ TOP BAR ═══════════════════════════════════════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <svg class="brand-icon" width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <path d="M18 2L3 8.5v10C3 27.3 9.8 33.5 18 34c8.2-.5 15-6.7 15-15.5v-10L18 2z"
+              stroke="#22d3ee" stroke-width="1.5" fill="rgba(34,211,238,0.07)"/>
+        <rect x="10" y="14" width="11" height="8" rx="1.5"
+              stroke="#22d3ee" stroke-width="1.2"/>
+        <path d="M21 16.5l4.5-2v7l-4.5-2" stroke="#22d3ee" stroke-width="1.2"
+              stroke-linejoin="round"/>
+        <circle cx="14.5" cy="18" r="1.5" fill="#22d3ee"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">نظام المراقبة المركزي</span>
+        <span class="brand-sub">ATYAF SECURITY OPERATIONS</span>
       </div>
     </div>
-    <div id="eventsGrid" class="events-grid">
-      <div class="placeholder">اختر فرعاً ثم اضغط تحميل</div>
+    <div class="topbar-right">
+      <div class="sys-status">
+        <span class="pulse-dot"></span>
+        <span class="sys-status-label">النظام نشط</span>
+      </div>
+      <div class="divider-v"></div>
+      <div class="clock" id="clock">--:--:--</div>
     </div>
-  </div>
+  </header>
 
-  <!-- ── LIVE STREAM MODAL ─────────────────────────────────────────────── -->
-  <div id="streamModal" class="modal-overlay hidden">
-    <div class="modal-box stream-modal-box">
-      <button class="modal-close" id="closeStreamModal">✕</button>
-      <div class="modal-title" id="streamModalTitle"></div>
-      <iframe id="streamFrame" src="" allowfullscreen
-              allow="autoplay; camera; microphone"></iframe>
+  <div class="workspace">
+
+    <!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════ -->
+    <nav class="sidebar">
+      <div class="nav-group">
+        <span class="nav-group-label">التشغيل</span>
+
+        <button class="nav-item active" data-tab="live">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M15 10l4.553-2.069A1 1 0 0121 8.951V15.05a1 1 0 01-1.447.89L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>المراقبة المباشرة</span>
+        </button>
+
+        <button class="nav-item" data-tab="events">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>سجل الأحداث</span>
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <span class="nav-group-label">الإدارة</span>
+
+        <button class="nav-item" data-tab="upload">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 4a4 4 0 110 8 4 4 0 010-8zM6 20a6 6 0 0112 0"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M18 14l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>إدارة الوجوه</span>
+        </button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-version">v1.0 · Frigate NVR</div>
+      </div>
+    </nav>
+
+    <!-- ═══ MAIN CONTENT ══════════════════════════════════════════════════ -->
+    <main class="content">
+
+      <!-- LIVE TAB ────────────────────────────────────────────────────── -->
+      <div id="tab-live" class="tab-pane active">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">المراقبة المباشرة</h1>
+            <p class="pane-sub">بث مباشر من جميع كاميرات الفروع</p>
+          </div>
+          <button class="action-btn" id="refreshStatusBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 4v5h5M20 20v-5h-5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4.93 9A10 10 0 1119 19.07" stroke-linecap="round"/>
+            </svg>
+            تحديث الحالة
+          </button>
+        </div>
+        <div id="liveGrid" class="live-grid">
+          <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+            </svg>
+            <span>جارٍ تحميل الفروع...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- EVENTS TAB ──────────────────────────────────────────────────── -->
+      <div id="tab-events" class="tab-pane hidden">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">سجل الأحداث</h1>
+            <p class="pane-sub">أحداث الرصد والتعرف من جميع الفروع</p>
+          </div>
+          <div class="filter-row">
+            <select id="evtSite" class="dark-select">
+              <option value="">— اختر الفرع —</option>
+            </select>
+            <select id="evtCamera" class="dark-select">
+              <option value="">جميع الكاميرات</option>
+            </select>
+            <button class="action-btn" id="loadEventsBtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35" stroke-linecap="round"/>
+              </svg>
+              بحث
+            </button>
+          </div>
+        </div>
+        <div id="eventsGrid" class="events-grid">
+          <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+            </svg>
+            <span>اختر فرعاً ثم اضغط بحث</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- UPLOAD TAB ──────────────────────────────────────────────────── -->
+      <div id="tab-upload" class="tab-pane hidden">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">إدارة الوجوه</h1>
+            <p class="pane-sub">ربط صور الموظفين بمكتبة التعرف الخاصة بكل فرع</p>
+          </div>
+        </div>
+
+        <div class="upload-layout">
+          <div class="upload-panel">
+
+            <div class="panel-section">
+              <div class="section-label">
+                <span class="section-num">١</span>بيانات الموظف
+              </div>
+              <div class="field">
+                <label class="field-label" for="employee_id">رقم الموظف</label>
+                <input type="text" id="employee_id" name="employee_id"
+                       class="dark-input" placeholder="HR-EMP-00001"
+                       autocomplete="off" required>
+              </div>
+              <div class="field">
+                <label class="field-label" for="branch">الفرع</label>
+                <select id="branch" name="branch" class="dark-select full-width" required>
+                  <option value="" disabled selected>اختر الفرع...</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="panel-section">
+              <div class="section-label">
+                <span class="section-num">٢</span>الصورة
+              </div>
+              <label for="picture" class="file-drop" id="fileDrop">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="1.2">
+                  <path d="M4 16l4-4 4 4 4-6 4 6M4 20h16M12 4v8"
+                        stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span id="fileName">اسحب الصورة هنا أو اضغط للاختيار</span>
+                <span class="file-hint">PNG · JPG · WEBP — حتى 10 MB</span>
+              </label>
+              <input type="file" id="picture" name="picture" accept="image/*" required>
+              <img id="preview" class="file-preview hidden" alt="معاينة">
+            </div>
+
+            <button type="submit" id="submitBtn" form="uploadForm" class="submit-btn">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              رفع وتسجيل الصورة
+            </button>
+
+            <div id="uploadMsg" class="upload-msg hidden"></div>
+          </div>
+
+          <div class="upload-info">
+            <div class="info-card">
+              <div class="info-card-title">كيف يعمل النظام</div>
+              <ul class="info-steps">
+                <li>
+                  <span class="step-dot"></span>
+                  <span>أول صورة تربط الموظف بالفرع نهائياً</span>
+                </li>
+                <li>
+                  <span class="step-dot"></span>
+                  <span>يمكن إضافة عدة صور لنفس الموظف لتحسين التعرف</span>
+                </li>
+                <li>
+                  <span class="step-dot"></span>
+                  <span>الصور ترفع تلقائياً لمكتبة فريجيت في الفرع المحدد</span>
+                </li>
+                <li>
+                  <span class="step-dot"></span>
+                  <span>لا يمكن نقل الموظف لفرع آخر بعد التسجيل</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <form id="uploadForm" enctype="multipart/form-data" novalidate style="display:none"></form>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═══ STREAM MODAL ══════════════════════════════════════════════════════ -->
+<div id="streamModal" class="modal-overlay hidden">
+  <div class="modal-box stream-box">
+    <div class="modal-header">
+      <span id="streamModalTitle" class="modal-title-text"></span>
+      <button class="modal-x" id="closeStreamModal">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
+    <iframe id="streamFrame" src="" allowfullscreen
+            allow="autoplay; camera; microphone"></iframe>
   </div>
+</div>
 
-  <!-- ── SNAPSHOT MODAL ────────────────────────────────────────────────── -->
-  <div id="snapModal" class="modal-overlay hidden">
-    <div class="modal-box snap-modal-box">
-      <button class="modal-close" id="closeSnapModal">✕</button>
-      <img id="snapImg" src="" alt="لقطة الحدث">
-      <div class="snap-meta" id="snapMeta"></div>
+<!-- ═══ SNAPSHOT MODAL ════════════════════════════════════════════════════ -->
+<div id="snapModal" class="modal-overlay hidden">
+  <div class="modal-box snap-box">
+    <div class="modal-header">
+      <span class="modal-title-text">لقطة الحدث</span>
+      <button class="modal-x" id="closeSnapModal">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
+    <img id="snapImg" src="" alt="لقطة الحدث">
+    <div class="snap-meta" id="snapMeta"></div>
   </div>
+</div>
 
-  <script src="app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
