@@ -11,6 +11,7 @@ const db         = require('./db');
 const FRAPPE_BASE       = (process.env.FRAPPE_BASE_URL || 'https://dr-atyaf.e2next.com').replace(/\/$/, '');
 const FRAPPE_API_KEY    = process.env.FRAPPE_API_KEY    || '';
 const FRAPPE_API_SECRET = process.env.FRAPPE_API_SECRET || '';
+const SYNC_SECRET       = process.env.SYNC_SECRET       || '';
 
 const app   = express();
 const PORT  = 3000;
@@ -28,8 +29,6 @@ try {
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // ── Per-site transparent proxy (HTTP + WebSocket) ─────────────────────────────
-// Mounts BEFORE body-parser so that proxied requests are not consumed.
-// Accessible at /proxy/:siteId/  →  site.frigateUrl
 sites.forEach(site => {
   app.use(
     `/proxy/${site.id}`,
@@ -64,6 +63,14 @@ async function proxyFetch(url, init = {}) {
   finally { clearTimeout(t); }
 }
 
+function requireSyncSecret(req, res, next) {
+  const provided = req.query.secret || req.headers['x-sync-secret'];
+  if (!SYNC_SECRET || provided !== SYNC_SECRET) {
+    return res.status(401).json({ error: 'غير مصرح' });
+  }
+  next();
+}
+
 // ── Multer ────────────────────────────────────────────────────────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -90,7 +97,6 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
     return res.status(400).json({ error: 'رقم الموظف والفرع مطلوبان' });
   }
 
-  // Look up stored record; use its company if available
   const row = db.prepare('SELECT branch, company FROM employees WHERE employee_id = ?').get(employeeId);
   if (row?.company) company = row.company;
 
@@ -98,7 +104,6 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
     return res.status(400).json({ error: 'الشركة مطلوبة — قم بمزامنة الموظفين أو أدخل اسم الشركة يدوياً' });
   }
 
-  // Enforce single-branch rule
   if (row && row.branch !== branch) {
     return res.status(409).json({
       error: `هذا الموظف مسجل بالفعل في الفرع: ${row.branch}`
@@ -114,7 +119,6 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
     return res.status(400).json({ error: 'قيمة غير صالحة' });
   }
 
-  // DB first so a file-write failure still preserves the branch/company assignment
   if (!row) {
     db.prepare('INSERT INTO employees (employee_id, branch, company) VALUES (?, ?, ?)').run(employeeId, branch, company);
   }
@@ -124,27 +128,54 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
   const filename = `${Date.now()}${ext}`;
   fs.writeFileSync(path.join(targetDir, filename), req.file.buffer);
 
-  // Push to that site's Frigate face-recognition library (best-effort)
-  const site = sites.find(s => s.branch === branch);
-  if (site) {
-    try {
-      const fd = new FormData();
-      fd.append(
-        'file',
-        new Blob([req.file.buffer], { type: req.file.mimetype }),
-        filename
-      );
-      await fetch(`${site.frigateUrl}/api/faces/${encodeURIComponent(employeeId)}`, {
-        method: 'POST',
-        body: fd,
-        signal: AbortSignal.timeout(8000)
-      });
-    } catch (e) {
-      console.warn(`[warn] Could not push face to ${site.frigateUrl}: ${e.message}`);
+  res.json({ success: true, message: 'تم رفع الصورة بنجاح' });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FACE SYNC API  (consumed by local-site face_sync.py)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /api/faces/manifest?branch=X&secret=Y
+// Returns list of face files for the given branch across all companies.
+app.get('/api/faces/manifest', requireSyncSecret, (req, res) => {
+  const branch = (req.query.branch || '').trim();
+  if (!branch) return res.status(400).json({ error: 'branch مطلوب' });
+
+  const safeBranch = sanitize(branch);
+  const items = [];
+
+  if (!fs.existsSync(FACES)) return res.json([]);
+
+  for (const company of fs.readdirSync(FACES)) {
+    const branchDir = path.join(FACES, company, safeBranch);
+    if (!fs.existsSync(branchDir) || !fs.statSync(branchDir).isDirectory()) continue;
+    for (const person of fs.readdirSync(branchDir)) {
+      const personDir = path.join(branchDir, person);
+      if (!fs.statSync(personDir).isDirectory()) continue;
+      for (const file of fs.readdirSync(personDir)) {
+        items.push({ company, branch: safeBranch, person, file });
+      }
     }
   }
 
-  res.json({ success: true, message: 'تم رفع الصورة بنجاح' });
+  res.json(items);
+});
+
+// GET /api/faces/file/:company/:branch/:person/:filename?secret=Y
+app.get('/api/faces/file/:company/:branch/:person/:filename', requireSyncSecret, (req, res) => {
+  const { company, branch, person, filename } = req.params;
+  const filePath = path.resolve(
+    FACES,
+    sanitize(company),
+    sanitize(branch),
+    sanitize(person),
+    sanitize(filename)
+  );
+
+  if (!filePath.startsWith(FACES + path.sep)) return res.status(400).end();
+  if (!fs.existsSync(filePath)) return res.status(404).end();
+
+  res.sendFile(filePath);
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -302,10 +333,7 @@ app.use((err, _req, res, _next) => {
 
 const server = app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
 
-// Let http-proxy-middleware handle upgrade events for WebSocket
 server.on('upgrade', (req, socket, head) => {
-  // The proxy middleware registered above handles WS upgrades automatically
-  // when ws:true is set; this listener prevents Node from closing the socket.
   const handled = sites.some(site => req.url.startsWith(`/proxy/${site.id}`));
   if (!handled) socket.destroy();
 });
