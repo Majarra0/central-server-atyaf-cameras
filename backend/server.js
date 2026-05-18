@@ -344,6 +344,56 @@ app.post('/api/employees/sync', async (_req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// SAVED FACES MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/saved-faces', (_req, res) => {
+  const rows = db.prepare(`
+    SELECT e.employee_id, h.employee_name, e.branch, e.company
+    FROM employees e
+    LEFT JOIN hr_employees h ON e.employee_id = h.employee_id
+    ORDER BY e.company, e.branch, e.employee_id
+  `).all();
+
+  const result = rows.map(row => {
+    const dir = path.resolve(FACES, sanitize(row.company), sanitize(row.branch), sanitize(row.employee_id));
+    let files = [];
+    if (dir.startsWith(FACES + path.sep)) {
+      try {
+        files = fs.existsSync(dir)
+          ? fs.readdirSync(dir).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f))
+          : [];
+      } catch {}
+    }
+    return { ...row, photoCount: files.length, firstPhoto: files[0] || null };
+  });
+
+  res.json(result);
+});
+
+app.delete('/api/saved-faces/:employeeId', (req, res) => {
+  const row = db.prepare('SELECT branch, company FROM employees WHERE employee_id = ?').get(req.params.employeeId);
+  if (!row) return res.status(404).json({ error: 'الموظف غير موجود' });
+
+  db.prepare('DELETE FROM employees WHERE employee_id = ?').run(req.params.employeeId);
+
+  const dir = path.resolve(FACES, sanitize(row.company), sanitize(row.branch), sanitize(req.params.employeeId));
+  if (dir.startsWith(FACES + path.sep) && fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  // Remove empty parent dirs
+  try {
+    const branchDir  = path.join(FACES, sanitize(row.company), sanitize(row.branch));
+    const companyDir = path.join(FACES, sanitize(row.company));
+    if (fs.existsSync(branchDir)  && fs.readdirSync(branchDir).length  === 0) fs.rmdirSync(branchDir);
+    if (fs.existsSync(companyDir) && fs.readdirSync(companyDir).length === 0) fs.rmdirSync(companyDir);
+  } catch {}
+
+  res.json({ success: true });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ADMIN RESET
 // ══════════════════════════════════════════════════════════════════════════════
 app.delete('/api/admin/reset', (req, res) => {

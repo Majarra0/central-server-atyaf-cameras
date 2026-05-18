@@ -66,6 +66,16 @@
           </svg>
           <span>إدارة الوجوه</span>
         </button>
+
+        <button class="nav-item" data-tab="faces">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7" rx="1" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="14" y="3" width="7" height="7" rx="1" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="3" y="14" width="7" height="7" rx="1" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="14" y="14" width="7" height="7" rx="1" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>الصور المحفوظة</span>
+        </button>
       </div>
 
       <div class="sidebar-footer">
@@ -244,6 +254,32 @@
         </div>
 
         <form id="uploadForm" enctype="multipart/form-data" novalidate style="display:none"></form>
+      </div>
+
+      <!-- FACES TAB ──────────────────────────────────────────────────── -->
+      <div id="tab-faces" class="tab-pane hidden">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">الصور المحفوظة</h1>
+            <p class="pane-sub">إدارة صور الوجوه وسجلات قاعدة البيانات</p>
+          </div>
+          <button class="action-btn" id="refreshFacesBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 4v5h5M20 20v-5h-5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4.93 9A10 10 0 1119 19.07" stroke-linecap="round"/>
+            </svg>
+            تحديث
+          </button>
+        </div>
+        <div id="facesStats" class="faces-stats"></div>
+        <div id="facesList" class="faces-list">
+          <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+            </svg>
+            <span>اضغط تحديث لعرض الصور</span>
+          </div>
+        </div>
       </div>
 
     </main>

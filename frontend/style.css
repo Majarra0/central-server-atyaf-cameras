@@ -992,3 +992,143 @@ input[type="file"] { display: none; }
   text-align: center;
   letter-spacing: .04em;
 }
+
+/* ── Saved Faces Tab ──────────────────────────────────────────────────────── */
+.faces-stats {
+  margin-bottom: 1rem;
+}
+
+.faces-stat-bar {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .6rem 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: .85rem;
+  color: var(--text-2);
+}
+
+.faces-stat strong { color: var(--accent); }
+.faces-stat-sep   { color: var(--text-3); }
+
+.faces-list {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  overflow-y: auto;
+  max-height: calc(100vh - 230px);
+}
+
+.face-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .65rem 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color .15s;
+}
+
+.face-row:hover { border-color: var(--border-2); }
+
+.face-thumb-wrap {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.face-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.face-thumb-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+}
+
+.face-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.face-id {
+  font-family: var(--mono);
+  font-size: .82rem;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.face-name {
+  font-size: .85rem;
+  color: var(--text);
+  margin-top: .15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.face-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  flex-shrink: 0;
+}
+
+.face-tag {
+  padding: .2rem .55rem;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: .75rem;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.face-count {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  font-size: .8rem;
+  color: var(--text-2);
+  font-family: var(--mono);
+  flex-shrink: 0;
+  min-width: 60px;
+}
+
+.face-del-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.face-del-btn:hover {
+  background: rgba(248,113,113,.12);
+  border-color: rgba(248,113,113,.4);
+  color: #f87171;
+}
+
+.face-del-btn:disabled { opacity: .4; cursor: not-allowed; }

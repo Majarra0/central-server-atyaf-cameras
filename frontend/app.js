@@ -11,6 +11,7 @@ let activeTab  = 'upload';
   loadCache();
   initUploadTab();
   initEventsTab();
+  initFacesTab();
   bindTabs();
   bindModals();
   startClock();
@@ -173,6 +174,7 @@ function switchTab(name) {
   } else {
     stopAllSnapshots();
   }
+  if (name === 'faces') loadFacesList();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -671,4 +673,155 @@ function showMsg(el, type, text) {
 function hideMsg(el) {
   el.className   = 'upload-msg hidden';
   el.textContent = '';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SAVED FACES TAB
+// ══════════════════════════════════════════════════════════════════════════════
+function initFacesTab() {
+  document.getElementById('refreshFacesBtn').addEventListener('click', loadFacesList);
+}
+
+async function loadFacesList() {
+  const list  = document.getElementById('facesList');
+  const stats = document.getElementById('facesStats');
+  list.innerHTML = `
+    <div class="empty-state">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"
+           style="animation:spin .9s linear infinite">
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"
+              stroke-linecap="round"/>
+      </svg>
+      <span>جارٍ التحميل...</span>
+    </div>`;
+  stats.innerHTML = '';
+
+  try {
+    const r    = await fetch('/api/saved-faces');
+    const data = await r.json();
+
+    if (!data.length) {
+      list.innerHTML = `
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+            <circle cx="12" cy="8" r="4"/><path d="M6 20a6 6 0 0112 0"/>
+          </svg>
+          <span>لا توجد صور مسجلة بعد</span>
+        </div>`;
+      return;
+    }
+
+    const totalPhotos = data.reduce((s, e) => s + e.photoCount, 0);
+    stats.innerHTML = `
+      <div class="faces-stat-bar">
+        <span class="faces-stat"><strong>${data.length}</strong> موظف مسجل</span>
+        <span class="faces-stat-sep">·</span>
+        <span class="faces-stat"><strong>${totalPhotos}</strong> صورة إجمالاً</span>
+      </div>`;
+
+    list.innerHTML = '';
+    data.forEach(emp => list.appendChild(buildFaceRow(emp)));
+  } catch {
+    list.innerHTML = `<div class="empty-state"><span>تعذّر تحميل البيانات</span></div>`;
+  }
+}
+
+function buildFaceRow(emp) {
+  const thumbUrl = emp.firstPhoto
+    ? `/api/faces/file/${encodeURIComponent(emp.company)}/${encodeURIComponent(emp.branch)}/${encodeURIComponent(emp.employee_id)}/${encodeURIComponent(emp.firstPhoto)}`
+    : null;
+
+  const row = document.createElement('div');
+  row.className = 'face-row';
+  row.dataset.id = emp.employee_id;
+
+  row.innerHTML = `
+    <div class="face-thumb-wrap">
+      ${thumbUrl
+        ? `<img class="face-thumb" src="${thumbUrl}" alt=""
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        : ''}
+      <div class="face-thumb-empty" style="display:${thumbUrl ? 'none' : 'flex'}">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+          <circle cx="12" cy="8" r="4"/><path d="M6 20a6 6 0 0112 0"/>
+        </svg>
+      </div>
+    </div>
+    <div class="face-info">
+      <div class="face-id">${esc(emp.employee_id)}</div>
+      ${emp.employee_name ? `<div class="face-name">${esc(emp.employee_name)}</div>` : ''}
+    </div>
+    <div class="face-meta">
+      <span class="face-tag">${esc(emp.company)}</span>
+      <span class="face-tag">${esc(emp.branch)}</span>
+    </div>
+    <div class="face-count">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+      </svg>
+      ${emp.photoCount} صورة
+    </div>
+    <button class="face-del-btn" title="حذف">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3 6 5 6 21 6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>`;
+
+  row.querySelector('.face-del-btn').addEventListener('click', () => deleteFace(emp, row));
+  return row;
+}
+
+async function deleteFace(emp, row) {
+  if (!confirm(`حذف ${emp.employee_id} وجميع صوره؟`)) return;
+  const btn = row.querySelector('.face-del-btn');
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/saved-faces/${encodeURIComponent(emp.employee_id)}`, { method: 'DELETE' });
+    if (r.ok) {
+      row.style.transition = 'opacity .25s';
+      row.style.opacity    = '0';
+      setTimeout(() => {
+        row.remove();
+        updateFacesStats();
+      }, 260);
+    } else {
+      const d = await r.json();
+      alert(d.error || 'فشل الحذف');
+      btn.disabled = false;
+    }
+  } catch {
+    alert('تعذّر الاتصال بالخادم');
+    btn.disabled = false;
+  }
+}
+
+function updateFacesStats() {
+  const rows  = document.querySelectorAll('.face-row');
+  const stats = document.getElementById('facesStats');
+  if (!rows.length) {
+    stats.innerHTML = '';
+    document.getElementById('facesList').innerHTML = `
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <circle cx="12" cy="8" r="4"/><path d="M6 20a6 6 0 0112 0"/>
+        </svg>
+        <span>لا توجد صور مسجلة بعد</span>
+      </div>`;
+    return;
+  }
+  const empCount = rows.length;
+  const photoCount = Array.from(rows).reduce((s, r) => {
+    const txt = r.querySelector('.face-count')?.textContent || '';
+    return s + (parseInt(txt) || 0);
+  }, 0);
+  const bar = stats.querySelector('.faces-stat-bar');
+  if (bar) {
+    bar.innerHTML = `
+      <span class="faces-stat"><strong>${empCount}</strong> موظف مسجل</span>
+      <span class="faces-stat-sep">·</span>
+      <span class="faces-stat"><strong>${photoCount}</strong> صورة إجمالاً</span>`;
+  }
 }
