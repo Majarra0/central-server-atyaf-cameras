@@ -13,7 +13,7 @@ services:
     container_name: central-dashboard
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "8080:8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:

@@ -13,7 +13,7 @@ const FRAPPE_API_KEY    = process.env.FRAPPE_API_KEY    || '';
 const FRAPPE_API_SECRET = process.env.FRAPPE_API_SECRET || '';
 
 const app   = express();
-const PORT  = 3000;
+const PORT  = process.env.PORT || 8080;
 const FACES = path.join(__dirname, 'faces');
 
 // ── Sites ─────────────────────────────────────────────────────────────────────
@@ -278,8 +278,8 @@ app.post('/api/employees/sync', async (_req, res) => {
 
   const url = new URL(`${FRAPPE_BASE}/api/resource/Employee`);
   url.searchParams.set('fields',           JSON.stringify(['name', 'employee_name', 'branch', 'company']));
-  url.searchParams.set('filters',          JSON.stringify([['status', '=', 'Active']]));
-  url.searchParams.set('limit_page_length', '0');
+  url.searchParams.set('filters',          JSON.stringify([['status', '!=', 'Left']]));
+  url.searchParams.set('limit_page_length', '500');
 
   let data;
   try {
@@ -296,7 +296,7 @@ app.post('/api/employees/sync', async (_req, res) => {
     return res.status(503).json({ error: `تعذّر الاتصال بـ Frappe: ${e.message}` });
   }
 
-  const employees = (data.data || []).filter(e => e.name && e.branch && e.company);
+  const employees = (data.data || []).filter(e => e.name && e.company);
 
   const upsert = db.prepare(`
     INSERT OR REPLACE INTO employees (employee_id, employee_name, branch, company)
