@@ -13,7 +13,7 @@ const FRAPPE_API_KEY    = process.env.FRAPPE_API_KEY    || '';
 const FRAPPE_API_SECRET = process.env.FRAPPE_API_SECRET || '';
 
 const app   = express();
-const PORT  = process.env.PORT || 8080;
+const PORT  = 3000;
 const FACES = path.join(__dirname, 'faces');
 
 // ── Sites ─────────────────────────────────────────────────────────────────────
