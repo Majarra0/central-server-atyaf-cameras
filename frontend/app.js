@@ -46,6 +46,8 @@ async function loadEmployees() {
     employees = [];
   }
   populateEmployeeDatalist();
+  populateBranchDropdown();
+  populateCompanyDatalist();
 }
 
 function populateEmployeeDatalist() {
@@ -57,6 +59,46 @@ function populateEmployeeDatalist() {
     opt.value = e.employee_id;
     opt.label = [e.employee_id, e.employee_name, e.company, e.branch].filter(Boolean).join(' — ');
     dl.appendChild(opt);
+  });
+}
+
+function populateBranchDropdown() {
+  const sel = document.getElementById('branch');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="" disabled>اختر الفرع...</option>';
+  const seen = new Set();
+  sites.forEach(s => {
+    if (s.branch && !seen.has(s.branch)) {
+      seen.add(s.branch);
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = s.branch;
+      sel.appendChild(opt);
+    }
+  });
+  employees.forEach(e => {
+    if (e.branch && !seen.has(e.branch)) {
+      seen.add(e.branch);
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = e.branch;
+      sel.appendChild(opt);
+    }
+  });
+  if (current && seen.has(current)) sel.value = current;
+}
+
+function populateCompanyDatalist() {
+  const dl = document.getElementById('companyList');
+  if (!dl) return;
+  dl.innerHTML = '';
+  const seen = new Set();
+  employees.forEach(e => {
+    if (e.company && !seen.has(e.company)) {
+      seen.add(e.company);
+      const opt = document.createElement('option');
+      opt.value = e.company;
+      dl.appendChild(opt);
+    }
   });
 }
 
@@ -88,13 +130,7 @@ function switchTab(name) {
 // UPLOAD TAB
 // ══════════════════════════════════════════════════════════════════════════════
 function initUploadTab() {
-  const sel = document.getElementById('branch');
-  sites.forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s.branch;
-    opt.textContent = s.branch;
-    sel.appendChild(opt);
-  });
+  populateBranchDropdown();
 
   // Auto-fill company and branch when a synced employee is selected
   const empInput     = document.getElementById('employee_id');
@@ -105,14 +141,8 @@ function initUploadTab() {
     if (match) {
       companyInput.value = match.company || '';
       if (match.branch) {
-        const branchSel = document.getElementById('branch');
-        // Add the branch option if not already present
-        if (![...branchSel.options].some(o => o.value === match.branch)) {
-          const opt = document.createElement('option');
-          opt.value = opt.textContent = match.branch;
-          branchSel.appendChild(opt);
-        }
-        branchSel.value = match.branch;
+        populateBranchDropdown();
+        document.getElementById('branch').value = match.branch;
       }
     }
   });
