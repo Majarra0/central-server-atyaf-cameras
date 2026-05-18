@@ -33,7 +33,15 @@ db.exec(`
   )
 `);
 
+db.exec(`CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY)`);
+
 // Migrate existing installs
 try { db.exec(`ALTER TABLE employees ADD COLUMN company TEXT NOT NULL DEFAULT ''`); } catch {}
+
+// One-time: clear employees rows that were incorrectly written by sync (not uploads)
+if (!db.prepare("SELECT 1 FROM migrations WHERE name = 'clear_sync_employees'").get()) {
+  db.exec('DELETE FROM employees');
+  db.prepare("INSERT INTO migrations (name) VALUES ('clear_sync_employees')").run();
+}
 
 module.exports = db;

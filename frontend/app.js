@@ -45,7 +45,6 @@ async function loadEmployees() {
   } catch {
     employees = [];
   }
-  refreshUploadDropdowns();
 }
 
 async function loadCompanies() {
@@ -55,7 +54,6 @@ async function loadCompanies() {
   } catch {
     companies = [];
   }
-  refreshUploadDropdowns();
 }
 
 function refreshUploadDropdowns() {
@@ -194,6 +192,7 @@ function initUploadTab() {
         syncMsg.textContent = `تمت المزامنة · ${data.saved ?? data.count} موظف · ${data.companies ?? 0} شركة`;
         syncMsg.style.color = '#22d3ee';
         await Promise.all([loadEmployees(), loadCompanies()]);
+        refreshUploadDropdowns();
       } else {
         syncMsg.textContent = data.error || 'فشلت المزامنة';
         syncMsg.style.color = '#f87171';
