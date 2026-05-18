@@ -1,8 +1,13 @@
 [
-  {
-    "id": "site1",
-    "branch": "الفرع الرئيسي",
-    "frigateUrl": "http://host.docker.internal:15001",
-    "cameras": ["cam1", "cam2"]
-  }
+  { "id": "site1",  "branch": "بغداد - الحارثية",        "frigateUrl": "http://host.docker.internal:15001", "cameras": ["cam1", "cam2"] },
+  { "id": "site2",  "branch": "بغداد - الجادرية",        "frigateUrl": "http://host.docker.internal:15002", "cameras": ["cam1", "cam2"] },
+  { "id": "site3",  "branch": "البصرة",                  "frigateUrl": "http://host.docker.internal:15003", "cameras": ["cam1", "cam2"] },
+  { "id": "site4",  "branch": "الأنبار",                 "frigateUrl": "http://host.docker.internal:15004", "cameras": ["cam1", "cam2"] },
+  { "id": "site5",  "branch": "تكريت",                   "frigateUrl": "http://host.docker.internal:15005", "cameras": ["cam1", "cam2"] },
+  { "id": "site6",  "branch": "مركز الكوت",              "frigateUrl": "http://host.docker.internal:15006", "cameras": ["cam1", "cam2"] },
+  { "id": "site7",  "branch": "مستشفى الجادرية - الكوت", "frigateUrl": "http://host.docker.internal:15007", "cameras": ["cam1", "cam2"] },
+  { "id": "site8",  "branch": "أربيل",                   "frigateUrl": "http://host.docker.internal:15008", "cameras": ["cam1", "cam2"] },
+  { "id": "site9",  "branch": "الموصل",                  "frigateUrl": "http://host.docker.internal:15009", "cameras": ["cam1", "cam2"] },
+  { "id": "site10", "branch": "كركوك",                   "frigateUrl": "http://host.docker.internal:15010", "cameras": ["cam1", "cam2"] },
+  { "id": "site11", "branch": "مذخر الحارثيه",           "frigateUrl": "http://host.docker.internal:15011", "cameras": ["cam1", "cam2"] }
 ]
