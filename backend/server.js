@@ -11,7 +11,6 @@ const db         = require('./db');
 const FRAPPE_BASE       = (process.env.FRAPPE_BASE_URL || 'https://dr-atyaf.e2next.com').replace(/\/$/, '');
 const FRAPPE_API_KEY    = process.env.FRAPPE_API_KEY    || '';
 const FRAPPE_API_SECRET = process.env.FRAPPE_API_SECRET || '';
-const SYNC_SECRET       = process.env.SYNC_SECRET       || '';
 
 const app   = express();
 const PORT  = 3000;
@@ -61,14 +60,6 @@ async function proxyFetch(url, init = {}) {
   const t = setTimeout(() => ctrl.abort(), 6000);
   try { return await fetch(url, { ...init, signal: ctrl.signal }); }
   finally { clearTimeout(t); }
-}
-
-function requireSyncSecret(req, res, next) {
-  const provided = req.query.secret || req.headers['x-sync-secret'];
-  if (!SYNC_SECRET || provided !== SYNC_SECRET) {
-    return res.status(401).json({ error: 'غير مصرح' });
-  }
-  next();
 }
 
 // ── Multer ────────────────────────────────────────────────────────────────────
@@ -132,12 +123,11 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FACE SYNC API  (consumed by local-site face_sync.py)
+// FACE SYNC API  (polled by each local site's face_sync.py)
 // ══════════════════════════════════════════════════════════════════════════════
 
-// GET /api/faces/manifest?branch=X&secret=Y
-// Returns list of face files for the given branch across all companies.
-app.get('/api/faces/manifest', requireSyncSecret, (req, res) => {
+// GET /api/faces/manifest?branch=X
+app.get('/api/faces/manifest', (req, res) => {
   const branch = (req.query.branch || '').trim();
   if (!branch) return res.status(400).json({ error: 'branch مطلوب' });
 
@@ -161,8 +151,8 @@ app.get('/api/faces/manifest', requireSyncSecret, (req, res) => {
   res.json(items);
 });
 
-// GET /api/faces/file/:company/:branch/:person/:filename?secret=Y
-app.get('/api/faces/file/:company/:branch/:person/:filename', requireSyncSecret, (req, res) => {
+// GET /api/faces/file/:company/:branch/:person/:filename
+app.get('/api/faces/file/:company/:branch/:person/:filename', (req, res) => {
   const { company, branch, person, filename } = req.params;
   const filePath = path.resolve(
     FACES,
