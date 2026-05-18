@@ -149,13 +149,23 @@
             <p class="pane-sub">ربط صور الموظفين بمكتبة التعرف الخاصة بكل فرع</p>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.5rem">
-            <button class="action-btn" id="syncEmployeesBtn">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 4v5h5M20 20v-5h-5" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M4.93 9A10 10 0 1119 19.07" stroke-linecap="round"/>
-              </svg>
-              مزامنة الموظفين
-            </button>
+            <div style="display:flex;gap:.5rem">
+              <button class="action-btn" id="syncEmployeesBtn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4v5h5M20 20v-5h-5" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M4.93 9A10 10 0 1119 19.07" stroke-linecap="round"/>
+                </svg>
+                مزامنة الموظفين
+              </button>
+              <button class="action-btn danger-btn" id="resetAllBtn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"
+                        stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                حذف كل البيانات
+              </button>
+            </div>
             <span id="syncMsg" style="font-size:.75rem;color:var(--text-muted)"></span>
           </div>
         </div>

@@ -314,6 +314,16 @@ body {
 
 .action-btn svg { flex-shrink: 0; }
 
+.danger-btn {
+  border-color: rgba(248,113,113,.35);
+  color: #f87171;
+}
+.danger-btn:hover {
+  background: rgba(248,113,113,.12);
+  border-color: #f87171;
+  color: #f87171;
+}
+
 /* ── Filter row ───────────────────────────────────────────────────────────── */
 .filter-row {
   display: flex;

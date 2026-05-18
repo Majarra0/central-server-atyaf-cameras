@@ -343,6 +343,32 @@ app.post('/api/employees/sync', async (_req, res) => {
   });
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ADMIN RESET
+// ══════════════════════════════════════════════════════════════════════════════
+app.delete('/api/admin/reset', (_req, res) => {
+  db.transaction(() => {
+    db.prepare('DELETE FROM employees').run();
+    db.prepare('DELETE FROM hr_employees').run();
+    db.prepare('DELETE FROM companies').run();
+  })();
+
+  let filesDeleted = 0;
+  if (fs.existsSync(FACES)) {
+    fs.readdirSync(FACES).forEach(entry => {
+      const full = path.join(FACES, entry);
+      try {
+        fs.rmSync(full, { recursive: true, force: true });
+        filesDeleted++;
+      } catch (e) {
+        console.warn('[reset] failed to remove', full, e.message);
+      }
+    });
+  }
+
+  res.json({ success: true, filesDeleted });
+});
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
   if (err.code === 'LIMIT_FILE_SIZE') {
