@@ -80,15 +80,15 @@ const upload = multer({
 app.post('/api/upload', upload.single('picture'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'لم يتم اختيار صورة' });
 
-  const employeeId   = (req.body.employee_id   || '').trim();
-  const employeeName = (req.body.employee_name || '').trim();
-  const branch       = (req.body.branch        || '').trim();
-  let   company      = (req.body.company       || '').trim();
+  const employeeId = (req.body.employee_id || '').trim();
+  const branch     = (req.body.branch     || '').trim();
+  let   company    = (req.body.company    || '').trim();
 
-  if (!employeeId || !employeeName || !branch) {
+  if (!employeeId || !branch) {
     return res.status(400).json({ error: 'بيانات الموظف والفرع مطلوبة' });
   }
 
+  // employees table = upload records only; never written by sync
   const row = db.prepare('SELECT branch, company FROM employees WHERE employee_id = ?').get(employeeId);
   if (row?.company) company = row.company;
 
@@ -104,17 +104,15 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
 
   const safeCompany = sanitize(company);
   const safeBranch  = sanitize(branch);
-  const safePerson  = sanitize(employeeName);  // display name = Frigate face label
-  const targetDir   = path.resolve(FACES, safeCompany, safeBranch, safePerson);
+  const safeEmp     = sanitize(employeeId);
+  const targetDir   = path.resolve(FACES, safeCompany, safeBranch, safeEmp);
 
   if (!targetDir.startsWith(FACES + path.sep)) {
     return res.status(400).json({ error: 'قيمة غير صالحة' });
   }
 
   if (!row) {
-    db.prepare(
-      'INSERT INTO employees (employee_id, employee_name, branch, company) VALUES (?, ?, ?, ?)'
-    ).run(employeeId, employeeName, branch, company);
+    db.prepare('INSERT INTO employees (employee_id, branch, company) VALUES (?, ?, ?)').run(employeeId, branch, company);
   }
 
   fs.mkdirSync(targetDir, { recursive: true });
@@ -262,7 +260,7 @@ app.get('/api/sites/:siteId/events/:eventId/clip', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 app.get('/api/employees', (_req, res) => {
   const rows = db.prepare(
-    'SELECT employee_id, employee_name, branch, company FROM employees ORDER BY employee_name'
+    'SELECT employee_id, employee_name, branch, company FROM hr_employees ORDER BY employee_name'
   ).all();
   res.json(rows);
 });
@@ -308,7 +306,7 @@ app.post('/api/employees/sync', async (_req, res) => {
   if (raw.length > 0) console.log('[sync] sample record:', JSON.stringify(raw[0]));
 
   const upsert = db.prepare(`
-    INSERT OR REPLACE INTO employees (employee_id, employee_name, branch, company)
+    INSERT OR REPLACE INTO hr_employees (employee_id, employee_name, branch, company)
     VALUES (?, ?, ?, ?)
   `);
 

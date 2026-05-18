@@ -177,13 +177,7 @@ function initUploadTab() {
     populateEmployeeDropdown(company, this.value);
   });
 
-  document.getElementById('employeeSelect').addEventListener('change', function () {
-    const emp = employees.find(e => e.employee_id === this.value);
-    if (emp) {
-      document.getElementById('employee_id').value   = emp.employee_id;
-      document.getElementById('employee_name').value = emp.employee_name || emp.employee_id;
-    }
-  });
+  // No change listener needed — employee is read directly from select at submit time
 
   // Sync button
   const syncBtn = document.getElementById('syncEmployeesBtn');
@@ -238,17 +232,17 @@ function initUploadTab() {
     e.preventDefault();
     hideMsg(msgEl);
 
-    const employeeId   = document.getElementById('employee_id').value;
-    const employeeName = document.getElementById('employee_name').value;
-    const branch       = document.getElementById('branch').value;
-    const company      = document.getElementById('company').value;
-    const file         = fileInput.files[0];
+    const company    = document.getElementById('company').value;
+    const branch     = document.getElementById('branch').value;
+    const empSelVal  = document.getElementById('employeeSelect').value;
+    const empRecord  = employees.find(e => e.employee_id === empSelVal);
+    const employeeId = empRecord?.employee_id || '';
+    const file       = fileInput.files[0];
 
-    if (!company)      return showMsg(msgEl, 'error', 'يرجى اختيار الشركة');
-    if (!branch)       return showMsg(msgEl, 'error', 'يرجى اختيار الفرع');
-    if (!employeeId)   return showMsg(msgEl, 'error', 'يرجى اختيار الموظف من القائمة');
-    if (!employeeName) return showMsg(msgEl, 'error', 'الموظف المختار لا يحتوي على اسم — أعد المزامنة');
-    if (!file)         return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
+    if (!company)    return showMsg(msgEl, 'error', 'يرجى اختيار الشركة');
+    if (!branch)     return showMsg(msgEl, 'error', 'يرجى اختيار الفرع');
+    if (!employeeId) return showMsg(msgEl, 'error', 'يرجى اختيار الموظف من القائمة');
+    if (!file)       return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
 
     submitBtn.disabled = true;
     submitBtn.innerHTML = `
@@ -261,10 +255,9 @@ function initUploadTab() {
     `;
 
     const fd = new FormData();
-    fd.append('employee_id',   employeeId);
-    fd.append('employee_name', employeeName);
-    fd.append('branch',        branch);
-    fd.append('company',       company);
+    fd.append('employee_id', employeeId);
+    fd.append('branch',      branch);
+    fd.append('company',     company);
     fd.append('picture',       file);
 
     try {
@@ -276,8 +269,6 @@ function initUploadTab() {
         document.getElementById('company').value        = '';
         document.getElementById('branch').value         = '';
         document.getElementById('employeeSelect').value = '';
-        document.getElementById('employee_id').value    = '';
-        document.getElementById('employee_name').value  = '';
         fileInput.value      = '';
         fileName.textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
         fileDrop.classList.remove('active');

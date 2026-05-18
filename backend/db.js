@@ -8,8 +8,18 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(path.join(dataDir, 'employees.db'));
 
+// Upload-tracking table — only populated when a photo is actually uploaded
 db.exec(`
   CREATE TABLE IF NOT EXISTS employees (
+    employee_id TEXT PRIMARY KEY,
+    branch      TEXT NOT NULL DEFAULT '',
+    company     TEXT NOT NULL DEFAULT ''
+  )
+`);
+
+// Frappe HR data — populated by sync, used for UI dropdowns only
+db.exec(`
+  CREATE TABLE IF NOT EXISTS hr_employees (
     employee_id   TEXT PRIMARY KEY,
     employee_name TEXT,
     branch        TEXT NOT NULL DEFAULT '',
@@ -24,7 +34,6 @@ db.exec(`
 `);
 
 // Migrate existing installs
-try { db.exec(`ALTER TABLE employees ADD COLUMN employee_name TEXT`); } catch {}
 try { db.exec(`ALTER TABLE employees ADD COLUMN company TEXT NOT NULL DEFAULT ''`); } catch {}
 
 module.exports = db;
