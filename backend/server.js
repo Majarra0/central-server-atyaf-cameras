@@ -267,6 +267,11 @@ app.get('/api/employees', (_req, res) => {
   res.json(rows);
 });
 
+app.get('/api/companies', (_req, res) => {
+  const rows = db.prepare('SELECT name FROM companies ORDER BY name').all();
+  res.json(rows.map(r => r.name));
+});
+
 app.post('/api/employees/sync', async (_req, res) => {
   if (!FRAPPE_API_KEY) {
     return res.status(503).json({ error: 'FRAPPE_API_KEY غير مضبوط في متغيرات البيئة' });
@@ -313,11 +318,36 @@ app.post('/api/employees/sync', async (_req, res) => {
     }
   })(employees);
 
+  // Fetch companies from the Company doctype directly so all companies appear
+  // even if the API key can't see every employee
+  let companyCount = 0;
+  try {
+    const compUrl = new URL(`${FRAPPE_BASE}/api/resource/Company`);
+    compUrl.searchParams.set('fields',           JSON.stringify(['name']));
+    compUrl.searchParams.set('limit_page_length', '100');
+    compUrl.searchParams.set('limit',             '100');
+    const cr = await fetch(compUrl.toString(), {
+      headers: { Authorization: authHeader },
+      signal:  AbortSignal.timeout(10000)
+    });
+    if (cr.ok) {
+      const cd = await cr.json();
+      const upsertCo = db.prepare('INSERT OR REPLACE INTO companies (name) VALUES (?)');
+      db.transaction(cos => {
+        for (const c of cos) { if (c.name) { upsertCo.run(c.name); companyCount++; } }
+      })(cd.data || []);
+      console.log(`[sync] companies fetched: ${companyCount}`);
+    }
+  } catch (e) {
+    console.warn('[sync] Could not fetch companies:', e.message);
+  }
+
   res.json({
-    success:       true,
-    frappe_total:  raw.length,
-    saved:         employees.length,
-    sample:        raw.slice(0, 3).map(e => ({ name: e.name, company: e.company, branch: e.branch, status: e.status }))
+    success:        true,
+    frappe_total:   raw.length,
+    saved:          employees.length,
+    companies:      companyCount,
+    sample:         raw.slice(0, 3).map(e => ({ name: e.name, company: e.company, branch: e.branch, status: e.status }))
   });
 });
 

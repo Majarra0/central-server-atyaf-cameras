@@ -1,18 +1,18 @@
 // ── State ─────────────────────────────────────────────────────────────────────
 let sites      = [];
 let employees  = [];
+let companies  = [];
 let snapTimers = {};
 let activeTab  = 'live';
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (async () => {
-  await Promise.all([loadSites(), loadEmployees()]);
+  await Promise.all([loadSites(), loadEmployees(), loadCompanies()]);
   initUploadTab();
   initEventsTab();
   bindTabs();
   bindModals();
   startClock();
-  // Render live grid immediately (it's the default tab)
   renderLiveGrid();
 })();
 
@@ -45,7 +45,20 @@ async function loadEmployees() {
   } catch {
     employees = [];
   }
-  // Refresh upload dropdowns, preserving current selections
+  refreshUploadDropdowns();
+}
+
+async function loadCompanies() {
+  try {
+    const r = await fetch('/api/companies');
+    companies = await r.json();
+  } catch {
+    companies = [];
+  }
+  refreshUploadDropdowns();
+}
+
+function refreshUploadDropdowns() {
   const company = document.getElementById('company')?.value || '';
   const branch  = document.getElementById('branch')?.value  || '';
   populateCompanyDropdown();
@@ -65,6 +78,16 @@ function populateCompanyDropdown() {
   const current = sel.value;
   sel.innerHTML = '<option value="" disabled>اختر الشركة...</option>';
   const seen = new Set();
+  // Company doctype first (authoritative, all companies even with no employees)
+  companies.forEach(c => {
+    if (c && !seen.has(c)) {
+      seen.add(c);
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = c;
+      sel.appendChild(opt);
+    }
+  });
+  // Employees as fallback (in case companies weren't synced yet)
   employees.forEach(e => {
     if (e.company && !seen.has(e.company)) {
       seen.add(e.company);
@@ -174,9 +197,9 @@ function initUploadTab() {
       const r    = await fetch('/api/employees/sync', { method: 'POST' });
       const data = await r.json();
       if (r.ok) {
-        syncMsg.textContent = `تمت المزامنة · ${data.count} موظف`;
+        syncMsg.textContent = `تمت المزامنة · ${data.saved ?? data.count} موظف · ${data.companies ?? 0} شركة`;
         syncMsg.style.color = '#22d3ee';
-        await loadEmployees();
+        await Promise.all([loadEmployees(), loadCompanies()]);
       } else {
         syncMsg.textContent = data.error || 'فشلت المزامنة';
         syncMsg.style.color = '#f87171';
@@ -221,10 +244,11 @@ function initUploadTab() {
     const company      = document.getElementById('company').value;
     const file         = fileInput.files[0];
 
-    if (!employeeId || !employeeName || !branch || !company)
-      return showMsg(msgEl, 'error', 'يرجى اختيار الشركة والفرع والموظف');
-    if (!file)
-      return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
+    if (!company)      return showMsg(msgEl, 'error', 'يرجى اختيار الشركة');
+    if (!branch)       return showMsg(msgEl, 'error', 'يرجى اختيار الفرع');
+    if (!employeeId)   return showMsg(msgEl, 'error', 'يرجى اختيار الموظف من القائمة');
+    if (!employeeName) return showMsg(msgEl, 'error', 'الموظف المختار لا يحتوي على اسم — أعد المزامنة');
+    if (!file)         return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
 
     submitBtn.disabled = true;
     submitBtn.innerHTML = `

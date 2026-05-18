@@ -21,9 +21,11 @@ services:
         required: false
     volumes:
       - dashboard-faces:/app/backend/faces
+      - dashboard-db:/app/backend/data
       - ./backend/sites.json:/app/backend/sites.json
     depends_on:
       - frps
 
 volumes:
   dashboard-faces:
+  dashboard-db:
