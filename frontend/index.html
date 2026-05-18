@@ -168,24 +168,24 @@
                 <span class="section-num">١</span>بيانات الموظف
               </div>
               <div class="field">
-                <label class="field-label" for="employee_id">رقم الموظف أو الاسم</label>
-                <input type="text" id="employee_id" name="employee_id"
-                       class="dark-input" placeholder="HR-EMP-00001"
-                       autocomplete="off" list="employeeList" required>
-                <datalist id="employeeList"></datalist>
-              </div>
-              <div class="field">
                 <label class="field-label" for="company">الشركة</label>
-                <input type="text" id="company" name="company"
-                       class="dark-input" placeholder="تُملأ تلقائياً عند اختيار موظف"
-                       autocomplete="off" list="companyList">
-                <datalist id="companyList"></datalist>
+                <select id="company" class="dark-select full-width">
+                  <option value="" disabled selected>اختر الشركة...</option>
+                </select>
               </div>
               <div class="field">
                 <label class="field-label" for="branch">الفرع</label>
-                <select id="branch" name="branch" class="dark-select full-width" required>
+                <select id="branch" class="dark-select full-width">
                   <option value="" disabled selected>اختر الفرع...</option>
                 </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="employeeSelect">الموظف</label>
+                <select id="employeeSelect" class="dark-select full-width">
+                  <option value="" disabled selected>اختر الموظف...</option>
+                </select>
+                <input type="hidden" id="employee_id">
+                <input type="hidden" id="employee_name">
               </div>
             </div>
 

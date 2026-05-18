@@ -45,61 +45,73 @@ async function loadEmployees() {
   } catch {
     employees = [];
   }
-  populateEmployeeDatalist();
-  populateBranchDropdown();
-  populateCompanyDatalist();
+  // Refresh upload dropdowns, preserving current selections
+  const company = document.getElementById('company')?.value || '';
+  const branch  = document.getElementById('branch')?.value  || '';
+  populateCompanyDropdown();
+  if (company) {
+    document.getElementById('company').value = company;
+    populateBranchDropdown(company);
+    if (branch) {
+      document.getElementById('branch').value = branch;
+      populateEmployeeDropdown(company, branch);
+    }
+  }
 }
 
-function populateEmployeeDatalist() {
-  const dl = document.getElementById('employeeList');
-  if (!dl) return;
-  dl.innerHTML = '';
-  employees.forEach(e => {
-    const opt = document.createElement('option');
-    opt.value = e.employee_id;
-    opt.label = [e.employee_id, e.employee_name, e.company, e.branch].filter(Boolean).join(' — ');
-    dl.appendChild(opt);
-  });
-}
-
-function populateBranchDropdown() {
-  const sel = document.getElementById('branch');
+function populateCompanyDropdown() {
+  const sel = document.getElementById('company');
   if (!sel) return;
   const current = sel.value;
-  sel.innerHTML = '<option value="" disabled>اختر الفرع...</option>';
+  sel.innerHTML = '<option value="" disabled>اختر الشركة...</option>';
   const seen = new Set();
-  sites.forEach(s => {
-    if (s.branch && !seen.has(s.branch)) {
-      seen.add(s.branch);
-      const opt = document.createElement('option');
-      opt.value = opt.textContent = s.branch;
-      sel.appendChild(opt);
-    }
-  });
   employees.forEach(e => {
-    if (e.branch && !seen.has(e.branch)) {
-      seen.add(e.branch);
+    if (e.company && !seen.has(e.company)) {
+      seen.add(e.company);
       const opt = document.createElement('option');
-      opt.value = opt.textContent = e.branch;
+      opt.value = opt.textContent = e.company;
       sel.appendChild(opt);
     }
   });
   if (current && seen.has(current)) sel.value = current;
 }
 
-function populateCompanyDatalist() {
-  const dl = document.getElementById('companyList');
-  if (!dl) return;
-  dl.innerHTML = '';
+function populateBranchDropdown(company) {
+  const sel = document.getElementById('branch');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="" disabled>اختر الفرع...</option>';
   const seen = new Set();
-  employees.forEach(e => {
-    if (e.company && !seen.has(e.company)) {
-      seen.add(e.company);
+  employees
+    .filter(e => !company || e.company === company)
+    .forEach(e => {
+      if (e.branch && !seen.has(e.branch)) {
+        seen.add(e.branch);
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = e.branch;
+        sel.appendChild(opt);
+      }
+    });
+  if (current && seen.has(current)) sel.value = current;
+}
+
+function populateEmployeeDropdown(company, branch) {
+  const sel = document.getElementById('employeeSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="" disabled>اختر الموظف...</option>';
+  document.getElementById('employee_id').value   = '';
+  document.getElementById('employee_name').value = '';
+  employees
+    .filter(e => (!company || e.company === company) && (!branch || e.branch === branch))
+    .sort((a, b) => (a.employee_name || '').localeCompare(b.employee_name || '', 'ar'))
+    .forEach(e => {
       const opt = document.createElement('option');
-      opt.value = e.company;
-      dl.appendChild(opt);
-    }
-  });
+      opt.value = e.employee_id;
+      opt.textContent = e.employee_name
+        ? `${e.employee_name} (${e.employee_id})`
+        : e.employee_id;
+      sel.appendChild(opt);
+    });
 }
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
@@ -130,20 +142,23 @@ function switchTab(name) {
 // UPLOAD TAB
 // ══════════════════════════════════════════════════════════════════════════════
 function initUploadTab() {
-  populateBranchDropdown();
+  populateCompanyDropdown();
 
-  // Auto-fill company and branch when a synced employee is selected
-  const empInput     = document.getElementById('employee_id');
-  const companyInput = document.getElementById('company');
+  document.getElementById('company').addEventListener('change', function () {
+    populateBranchDropdown(this.value);
+    populateEmployeeDropdown(this.value, '');
+  });
 
-  empInput.addEventListener('input', () => {
-    const match = employees.find(e => e.employee_id === empInput.value.trim());
-    if (match) {
-      companyInput.value = match.company || '';
-      if (match.branch) {
-        populateBranchDropdown();
-        document.getElementById('branch').value = match.branch;
-      }
+  document.getElementById('branch').addEventListener('change', function () {
+    const company = document.getElementById('company').value;
+    populateEmployeeDropdown(company, this.value);
+  });
+
+  document.getElementById('employeeSelect').addEventListener('change', function () {
+    const emp = employees.find(e => e.employee_id === this.value);
+    if (emp) {
+      document.getElementById('employee_id').value   = emp.employee_id;
+      document.getElementById('employee_name').value = emp.employee_name || emp.employee_id;
     }
   });
 
@@ -192,8 +207,6 @@ function initUploadTab() {
     reader.readAsDataURL(file);
   });
 
-  // The form wraps the hidden submit trigger; inputs are outside it,
-  // so we build FormData manually.
   const form      = document.getElementById('uploadForm');
   const submitBtn = document.getElementById('submitBtn');
   const msgEl     = document.getElementById('uploadMsg');
@@ -202,13 +215,16 @@ function initUploadTab() {
     e.preventDefault();
     hideMsg(msgEl);
 
-    const employeeId = document.getElementById('employee_id').value.trim();
-    const branch     = document.getElementById('branch').value;
-    const company    = document.getElementById('company').value.trim();
-    const file       = fileInput.files[0];
+    const employeeId   = document.getElementById('employee_id').value;
+    const employeeName = document.getElementById('employee_name').value;
+    const branch       = document.getElementById('branch').value;
+    const company      = document.getElementById('company').value;
+    const file         = fileInput.files[0];
 
-    if (!employeeId || !branch) return showMsg(msgEl, 'error', 'يرجى تعبئة جميع الحقول');
-    if (!file)                  return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
+    if (!employeeId || !employeeName || !branch || !company)
+      return showMsg(msgEl, 'error', 'يرجى اختيار الشركة والفرع والموظف');
+    if (!file)
+      return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
 
     submitBtn.disabled = true;
     submitBtn.innerHTML = `
@@ -221,10 +237,11 @@ function initUploadTab() {
     `;
 
     const fd = new FormData();
-    fd.append('employee_id', employeeId);
-    fd.append('branch',      branch);
-    fd.append('company',     company);
-    fd.append('picture',     file);
+    fd.append('employee_id',   employeeId);
+    fd.append('employee_name', employeeName);
+    fd.append('branch',        branch);
+    fd.append('company',       company);
+    fd.append('picture',       file);
 
     try {
       const res  = await fetch('/api/upload', { method: 'POST', body: fd });
@@ -232,14 +249,19 @@ function initUploadTab() {
 
       if (res.ok) {
         showMsg(msgEl, 'success', data.message);
-        document.getElementById('employee_id').value = '';
-        document.getElementById('branch').value      = '';
-        document.getElementById('company').value     = '';
-        fileInput.value                               = '';
+        document.getElementById('company').value        = '';
+        document.getElementById('branch').value         = '';
+        document.getElementById('employeeSelect').value = '';
+        document.getElementById('employee_id').value    = '';
+        document.getElementById('employee_name').value  = '';
+        fileInput.value      = '';
         fileName.textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
         fileDrop.classList.remove('active');
         preview.classList.add('hidden');
         preview.src = '';
+        populateCompanyDropdown();
+        populateBranchDropdown('');
+        populateEmployeeDropdown('', '');
       } else {
         showMsg(msgEl, 'error', data.error || 'حدث خطأ غير متوقع');
       }

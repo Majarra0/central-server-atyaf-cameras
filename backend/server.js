@@ -80,19 +80,20 @@ const upload = multer({
 app.post('/api/upload', upload.single('picture'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'لم يتم اختيار صورة' });
 
-  const employeeId = (req.body.employee_id || '').trim();
-  const branch     = (req.body.branch     || '').trim();
-  let   company    = (req.body.company    || '').trim();
+  const employeeId   = (req.body.employee_id   || '').trim();
+  const employeeName = (req.body.employee_name || '').trim();
+  const branch       = (req.body.branch        || '').trim();
+  let   company      = (req.body.company       || '').trim();
 
-  if (!employeeId || !branch) {
-    return res.status(400).json({ error: 'رقم الموظف والفرع مطلوبان' });
+  if (!employeeId || !employeeName || !branch) {
+    return res.status(400).json({ error: 'بيانات الموظف والفرع مطلوبة' });
   }
 
   const row = db.prepare('SELECT branch, company FROM employees WHERE employee_id = ?').get(employeeId);
   if (row?.company) company = row.company;
 
   if (!company) {
-    return res.status(400).json({ error: 'الشركة مطلوبة — قم بمزامنة الموظفين أو أدخل اسم الشركة يدوياً' });
+    return res.status(400).json({ error: 'الشركة مطلوبة — قم بمزامنة الموظفين أولاً' });
   }
 
   if (row && row.branch !== branch) {
@@ -103,15 +104,17 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
 
   const safeCompany = sanitize(company);
   const safeBranch  = sanitize(branch);
-  const safeEmp     = sanitize(employeeId);
-  const targetDir   = path.resolve(FACES, safeCompany, safeBranch, safeEmp);
+  const safePerson  = sanitize(employeeName);  // display name = Frigate face label
+  const targetDir   = path.resolve(FACES, safeCompany, safeBranch, safePerson);
 
   if (!targetDir.startsWith(FACES + path.sep)) {
     return res.status(400).json({ error: 'قيمة غير صالحة' });
   }
 
   if (!row) {
-    db.prepare('INSERT INTO employees (employee_id, branch, company) VALUES (?, ?, ?)').run(employeeId, branch, company);
+    db.prepare(
+      'INSERT INTO employees (employee_id, employee_name, branch, company) VALUES (?, ?, ?, ?)'
+    ).run(employeeId, employeeName, branch, company);
   }
 
   fs.mkdirSync(targetDir, { recursive: true });
