@@ -280,7 +280,7 @@ app.post('/api/employees/sync', async (_req, res) => {
     : `Bearer ${FRAPPE_API_KEY}`;
 
   const url = new URL(`${FRAPPE_BASE}/api/resource/Employee`);
-  url.searchParams.set('fields',           JSON.stringify(['name', 'employee_name', 'branch', 'company', 'status']));
+  url.searchParams.set('fields',           JSON.stringify(['name', 'employee_name', 'branch', 'company']));
   url.searchParams.set('limit_page_length', '500');
   url.searchParams.set('limit',             '500');
 
@@ -301,9 +301,6 @@ app.post('/api/employees/sync', async (_req, res) => {
 
   const raw       = data.data || [];
   const employees = raw.filter(e => e.name && e.company);
-
-  console.log(`[sync] Frappe returned ${raw.length} records, ${employees.length} have company set`);
-  if (raw.length > 0) console.log('[sync] sample record:', JSON.stringify(raw[0]));
 
   const upsert = db.prepare(`
     INSERT OR REPLACE INTO hr_employees (employee_id, employee_name, branch, company)
@@ -334,18 +331,15 @@ app.post('/api/employees/sync', async (_req, res) => {
       db.transaction(cos => {
         for (const c of cos) { if (c.name) { upsertCo.run(c.name); companyCount++; } }
       })(cd.data || []);
-      console.log(`[sync] companies fetched: ${companyCount}`);
     }
   } catch (e) {
     console.warn('[sync] Could not fetch companies:', e.message);
   }
 
   res.json({
-    success:        true,
-    frappe_total:   raw.length,
-    saved:          employees.length,
-    companies:      companyCount,
-    sample:         raw.slice(0, 3).map(e => ({ name: e.name, company: e.company, branch: e.branch, status: e.status }))
+    success:   true,
+    saved:     employees.length,
+    companies: companyCount
   });
 });
 
