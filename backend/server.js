@@ -346,7 +346,10 @@ app.post('/api/employees/sync', async (_req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 // ADMIN RESET
 // ══════════════════════════════════════════════════════════════════════════════
-app.delete('/api/admin/reset', (_req, res) => {
+app.delete('/api/admin/reset', (req, res) => {
+  if (req.query.password !== 'frappe01') {
+    return res.status(401).json({ error: 'كلمة المرور غير صحيحة' });
+  }
   db.transaction(() => {
     db.prepare('DELETE FROM employees').run();
     db.prepare('DELETE FROM hr_employees').run();

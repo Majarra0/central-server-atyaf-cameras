@@ -205,14 +205,15 @@ function initUploadTab() {
 
   // Reset button
   document.getElementById('resetAllBtn').addEventListener('click', async () => {
-    if (!confirm('سيتم حذف جميع سجلات قاعدة البيانات وجميع صور الوجوه نهائياً.\nهل أنت متأكد؟')) return;
+    const password = prompt('أدخل كلمة المرور لتأكيد الحذف:');
+    if (!password) return;
     const btn = document.getElementById('resetAllBtn');
     btn.disabled = true;
     const msg = document.getElementById('syncMsg');
     msg.textContent = 'جارٍ الحذف...';
     msg.style.color = 'var(--text-muted)';
     try {
-      const r    = await fetch('/api/admin/reset', { method: 'DELETE' });
+      const r    = await fetch(`/api/admin/reset?password=${encodeURIComponent(password)}`, { method: 'DELETE' });
       const data = await r.json();
       if (r.ok) {
         msg.textContent = 'تم حذف جميع البيانات والملفات';
