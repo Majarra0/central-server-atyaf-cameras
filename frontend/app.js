@@ -1,11 +1,12 @@
 // ── State ─────────────────────────────────────────────────────────────────────
 let sites      = [];
+let employees  = [];
 let snapTimers = {};
 let activeTab  = 'live';
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (async () => {
-  await loadSites();
+  await Promise.all([loadSites(), loadEmployees()]);
   initUploadTab();
   initEventsTab();
   bindTabs();
@@ -34,6 +35,29 @@ async function loadSites() {
   } catch {
     sites = [];
   }
+}
+
+// ── Employees ─────────────────────────────────────────────────────────────────
+async function loadEmployees() {
+  try {
+    const r = await fetch('/api/employees');
+    employees = await r.json();
+  } catch {
+    employees = [];
+  }
+  populateEmployeeDatalist();
+}
+
+function populateEmployeeDatalist() {
+  const dl = document.getElementById('employeeList');
+  if (!dl) return;
+  dl.innerHTML = '';
+  employees.forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.employee_id;
+    opt.label = [e.employee_id, e.employee_name, e.company, e.branch].filter(Boolean).join(' — ');
+    dl.appendChild(opt);
+  });
 }
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
@@ -72,6 +96,54 @@ function initUploadTab() {
     sel.appendChild(opt);
   });
 
+  // Auto-fill company and branch when a synced employee is selected
+  const empInput     = document.getElementById('employee_id');
+  const companyInput = document.getElementById('company');
+
+  empInput.addEventListener('input', () => {
+    const match = employees.find(e => e.employee_id === empInput.value.trim());
+    if (match) {
+      companyInput.value = match.company || '';
+      if (match.branch) {
+        const branchSel = document.getElementById('branch');
+        // Add the branch option if not already present
+        if (![...branchSel.options].some(o => o.value === match.branch)) {
+          const opt = document.createElement('option');
+          opt.value = opt.textContent = match.branch;
+          branchSel.appendChild(opt);
+        }
+        branchSel.value = match.branch;
+      }
+    }
+  });
+
+  // Sync button
+  const syncBtn = document.getElementById('syncEmployeesBtn');
+  const syncMsg = document.getElementById('syncMsg');
+
+  syncBtn.addEventListener('click', async () => {
+    syncBtn.disabled = true;
+    syncMsg.textContent = 'جارٍ المزامنة...';
+    syncMsg.style.color = 'var(--text-muted)';
+    try {
+      const r    = await fetch('/api/employees/sync', { method: 'POST' });
+      const data = await r.json();
+      if (r.ok) {
+        syncMsg.textContent = `تمت المزامنة · ${data.count} موظف`;
+        syncMsg.style.color = '#22d3ee';
+        await loadEmployees();
+      } else {
+        syncMsg.textContent = data.error || 'فشلت المزامنة';
+        syncMsg.style.color = '#f87171';
+      }
+    } catch {
+      syncMsg.textContent = 'تعذّر الاتصال بالخادم';
+      syncMsg.style.color = '#f87171';
+    } finally {
+      syncBtn.disabled = false;
+    }
+  });
+
   const fileInput = document.getElementById('picture');
   const fileName  = document.getElementById('fileName');
   const fileDrop  = document.getElementById('fileDrop');
@@ -102,6 +174,7 @@ function initUploadTab() {
 
     const employeeId = document.getElementById('employee_id').value.trim();
     const branch     = document.getElementById('branch').value;
+    const company    = document.getElementById('company').value.trim();
     const file       = fileInput.files[0];
 
     if (!employeeId || !branch) return showMsg(msgEl, 'error', 'يرجى تعبئة جميع الحقول');
@@ -120,6 +193,7 @@ function initUploadTab() {
     const fd = new FormData();
     fd.append('employee_id', employeeId);
     fd.append('branch',      branch);
+    fd.append('company',     company);
     fd.append('picture',     file);
 
     try {
@@ -130,6 +204,7 @@ function initUploadTab() {
         showMsg(msgEl, 'success', data.message);
         document.getElementById('employee_id').value = '';
         document.getElementById('branch').value      = '';
+        document.getElementById('company').value     = '';
         fileInput.value                               = '';
         fileName.textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
         fileDrop.classList.remove('active');

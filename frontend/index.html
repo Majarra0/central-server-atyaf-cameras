@@ -148,6 +148,16 @@
             <h1 class="pane-title">إدارة الوجوه</h1>
             <p class="pane-sub">ربط صور الموظفين بمكتبة التعرف الخاصة بكل فرع</p>
           </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.5rem">
+            <button class="action-btn" id="syncEmployeesBtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4v5h5M20 20v-5h-5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4.93 9A10 10 0 1119 19.07" stroke-linecap="round"/>
+              </svg>
+              مزامنة الموظفين
+            </button>
+            <span id="syncMsg" style="font-size:.75rem;color:var(--text-muted)"></span>
+          </div>
         </div>
 
         <div class="upload-layout">
@@ -158,10 +168,17 @@
                 <span class="section-num">١</span>بيانات الموظف
               </div>
               <div class="field">
-                <label class="field-label" for="employee_id">رقم الموظف</label>
+                <label class="field-label" for="employee_id">رقم الموظف أو الاسم</label>
                 <input type="text" id="employee_id" name="employee_id"
                        class="dark-input" placeholder="HR-EMP-00001"
-                       autocomplete="off" required>
+                       autocomplete="off" list="employeeList" required>
+                <datalist id="employeeList"></datalist>
+              </div>
+              <div class="field">
+                <label class="field-label" for="company">الشركة</label>
+                <input type="text" id="company" name="company"
+                       class="dark-input" placeholder="تُملأ تلقائياً عند اختيار موظف"
+                       autocomplete="off">
               </div>
               <div class="field">
                 <label class="field-label" for="branch">الفرع</label>

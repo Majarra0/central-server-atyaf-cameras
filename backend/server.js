@@ -1,3 +1,5 @@
+try { require('dotenv').config(); } catch {}
+
 const express    = require('express');
 const multer     = require('multer');
 const path       = require('path');
@@ -5,6 +7,10 @@ const fs         = require('fs');
 const { Readable } = require('stream');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const db         = require('./db');
+
+const FRAPPE_BASE       = (process.env.FRAPPE_BASE_URL || 'https://dr-atyaf.e2next.com').replace(/\/$/, '');
+const FRAPPE_API_KEY    = process.env.FRAPPE_API_KEY    || '';
+const FRAPPE_API_SECRET = process.env.FRAPPE_API_SECRET || '';
 
 const app   = express();
 const PORT  = 3000;
@@ -78,30 +84,39 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
 
   const employeeId = (req.body.employee_id || '').trim();
   const branch     = (req.body.branch     || '').trim();
+  let   company    = (req.body.company    || '').trim();
 
   if (!employeeId || !branch) {
     return res.status(400).json({ error: 'رقم الموظف والفرع مطلوبان' });
   }
 
-  const safeEmp    = sanitize(employeeId);
-  const safeBranch = sanitize(branch);
-  const targetDir  = path.resolve(FACES, safeBranch, safeEmp);
+  // Look up stored record; use its company if available
+  const row = db.prepare('SELECT branch, company FROM employees WHERE employee_id = ?').get(employeeId);
+  if (row?.company) company = row.company;
 
-  if (!targetDir.startsWith(FACES + path.sep)) {
-    return res.status(400).json({ error: 'قيمة غير صالحة' });
+  if (!company) {
+    return res.status(400).json({ error: 'الشركة مطلوبة — قم بمزامنة الموظفين أو أدخل اسم الشركة يدوياً' });
   }
 
   // Enforce single-branch rule
-  const row = db.prepare('SELECT branch FROM employees WHERE employee_id = ?').get(employeeId);
   if (row && row.branch !== branch) {
     return res.status(409).json({
       error: `هذا الموظف مسجل بالفعل في الفرع: ${row.branch}`
     });
   }
 
-  // DB first so a file-write failure still preserves the branch assignment
+  const safeCompany = sanitize(company);
+  const safeBranch  = sanitize(branch);
+  const safeEmp     = sanitize(employeeId);
+  const targetDir   = path.resolve(FACES, safeCompany, safeBranch, safeEmp);
+
+  if (!targetDir.startsWith(FACES + path.sep)) {
+    return res.status(400).json({ error: 'قيمة غير صالحة' });
+  }
+
+  // DB first so a file-write failure still preserves the branch/company assignment
   if (!row) {
-    db.prepare('INSERT INTO employees (employee_id, branch) VALUES (?, ?)').run(employeeId, branch);
+    db.prepare('INSERT INTO employees (employee_id, branch, company) VALUES (?, ?, ?)').run(employeeId, branch, company);
   }
 
   fs.mkdirSync(targetDir, { recursive: true });
@@ -216,6 +231,61 @@ app.get('/api/sites/:siteId/events/:eventId/clip', async (req, res) => {
   } catch {
     res.status(503).end();
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EMPLOYEES
+// ══════════════════════════════════════════════════════════════════════════════
+app.get('/api/employees', (_req, res) => {
+  const rows = db.prepare(
+    'SELECT employee_id, employee_name, branch, company FROM employees ORDER BY employee_name'
+  ).all();
+  res.json(rows);
+});
+
+app.post('/api/employees/sync', async (_req, res) => {
+  if (!FRAPPE_API_KEY) {
+    return res.status(503).json({ error: 'FRAPPE_API_KEY غير مضبوط في متغيرات البيئة' });
+  }
+
+  const authHeader = FRAPPE_API_SECRET
+    ? `token ${FRAPPE_API_KEY}:${FRAPPE_API_SECRET}`
+    : `Bearer ${FRAPPE_API_KEY}`;
+
+  const url = new URL(`${FRAPPE_BASE}/api/resource/Employee`);
+  url.searchParams.set('fields',           JSON.stringify(['name', 'employee_name', 'branch', 'company']));
+  url.searchParams.set('filters',          JSON.stringify([['status', '=', 'Active']]));
+  url.searchParams.set('limit_page_length', '0');
+
+  let data;
+  try {
+    const r = await fetch(url.toString(), {
+      headers: { Authorization: authHeader },
+      signal:  AbortSignal.timeout(20000)
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      return res.status(r.status).json({ error: `Frappe: ${r.status}`, detail: text.slice(0, 300) });
+    }
+    data = await r.json();
+  } catch (e) {
+    return res.status(503).json({ error: `تعذّر الاتصال بـ Frappe: ${e.message}` });
+  }
+
+  const employees = (data.data || []).filter(e => e.name && e.branch && e.company);
+
+  const upsert = db.prepare(`
+    INSERT OR REPLACE INTO employees (employee_id, employee_name, branch, company)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  db.transaction(emps => {
+    for (const e of emps) {
+      upsert.run(e.name, e.employee_name || e.name, e.branch, e.company);
+    }
+  })(employees);
+
+  res.json({ success: true, count: employees.length });
 });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
