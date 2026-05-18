@@ -120,8 +120,6 @@ function populateEmployeeDropdown(company, branch) {
   const sel = document.getElementById('employeeSelect');
   if (!sel) return;
   sel.innerHTML = '<option value="" disabled>اختر الموظف...</option>';
-  document.getElementById('employee_id').value   = '';
-  document.getElementById('employee_name').value = '';
   employees
     .filter(e => (!company || e.company === company) && (!branch || e.branch === branch))
     .sort((a, b) => (a.employee_name || '').localeCompare(b.employee_name || '', 'ar'))
