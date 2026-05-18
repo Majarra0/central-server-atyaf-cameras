@@ -277,9 +277,9 @@ app.post('/api/employees/sync', async (_req, res) => {
     : `Bearer ${FRAPPE_API_KEY}`;
 
   const url = new URL(`${FRAPPE_BASE}/api/resource/Employee`);
-  url.searchParams.set('fields',           JSON.stringify(['name', 'employee_name', 'branch', 'company']));
-  url.searchParams.set('filters',          JSON.stringify([['status', '!=', 'Left']]));
+  url.searchParams.set('fields',           JSON.stringify(['name', 'employee_name', 'branch', 'company', 'status']));
   url.searchParams.set('limit_page_length', '500');
+  url.searchParams.set('limit',             '500');
 
   let data;
   try {
@@ -289,14 +289,18 @@ app.post('/api/employees/sync', async (_req, res) => {
     });
     if (!r.ok) {
       const text = await r.text();
-      return res.status(r.status).json({ error: `Frappe: ${r.status}`, detail: text.slice(0, 300) });
+      return res.status(r.status).json({ error: `Frappe: ${r.status}`, detail: text.slice(0, 500) });
     }
     data = await r.json();
   } catch (e) {
     return res.status(503).json({ error: `تعذّر الاتصال بـ Frappe: ${e.message}` });
   }
 
-  const employees = (data.data || []).filter(e => e.name && e.company);
+  const raw       = data.data || [];
+  const employees = raw.filter(e => e.name && e.company);
+
+  console.log(`[sync] Frappe returned ${raw.length} records, ${employees.length} have company set`);
+  if (raw.length > 0) console.log('[sync] sample record:', JSON.stringify(raw[0]));
 
   const upsert = db.prepare(`
     INSERT OR REPLACE INTO employees (employee_id, employee_name, branch, company)
@@ -305,11 +309,16 @@ app.post('/api/employees/sync', async (_req, res) => {
 
   db.transaction(emps => {
     for (const e of emps) {
-      upsert.run(e.name, e.employee_name || e.name, e.branch, e.company);
+      upsert.run(e.name, e.employee_name || e.name, e.branch || '', e.company);
     }
   })(employees);
 
-  res.json({ success: true, count: employees.length });
+  res.json({
+    success:       true,
+    frappe_total:  raw.length,
+    saved:         employees.length,
+    sample:        raw.slice(0, 3).map(e => ({ name: e.name, company: e.company, branch: e.branch, status: e.status }))
+  });
 });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
