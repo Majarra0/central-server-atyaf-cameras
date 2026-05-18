@@ -3,17 +3,27 @@ let sites      = [];
 let employees  = [];
 let companies  = [];
 let snapTimers = {};
-let activeTab  = 'live';
+let activeTab  = 'upload';
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (async () => {
-  await Promise.all([loadSites(), loadEmployees(), loadCompanies()]);
+  // Restore from cache immediately so UI is usable before network responds
+  loadCache();
   initUploadTab();
   initEventsTab();
   bindTabs();
   bindModals();
   startClock();
-  renderLiveGrid();
+
+  // Restore last active tab (skip 'live' since that tab is hidden)
+  const savedTab = localStorage.getItem('activeTab');
+  switchTab(savedTab && savedTab !== 'live' ? savedTab : 'upload');
+
+  // Fetch fresh data in background, update UI when done
+  await Promise.all([loadSites(), loadEmployees(), loadCompanies()]);
+  saveCache();
+  refreshUploadDropdowns();
+  initEventsTab();          // re-populate site dropdown with fresh sites
 })();
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
@@ -27,14 +37,25 @@ function startClock() {
   setInterval(tick, 1000);
 }
 
+// ── Cache ─────────────────────────────────────────────────────────────────────
+function loadCache() {
+  try { sites     = JSON.parse(localStorage.getItem('cache_sites'))     || []; } catch { sites = []; }
+  try { employees = JSON.parse(localStorage.getItem('cache_employees')) || []; } catch { employees = []; }
+  try { companies = JSON.parse(localStorage.getItem('cache_companies')) || []; } catch { companies = []; }
+}
+
+function saveCache() {
+  try { localStorage.setItem('cache_sites',     JSON.stringify(sites));     } catch {}
+  try { localStorage.setItem('cache_employees', JSON.stringify(employees)); } catch {}
+  try { localStorage.setItem('cache_companies', JSON.stringify(companies)); } catch {}
+}
+
 // ── Sites ─────────────────────────────────────────────────────────────────────
 async function loadSites() {
   try {
     const r = await fetch('/api/sites');
     sites = await r.json();
-  } catch {
-    sites = [];
-  }
+  } catch {}
 }
 
 // ── Employees ─────────────────────────────────────────────────────────────────
@@ -42,18 +63,14 @@ async function loadEmployees() {
   try {
     const r = await fetch('/api/employees');
     employees = await r.json();
-  } catch {
-    employees = [];
-  }
+  } catch {}
 }
 
 async function loadCompanies() {
   try {
     const r = await fetch('/api/companies');
     companies = await r.json();
-  } catch {
-    companies = [];
-  }
+  } catch {}
 }
 
 function refreshUploadDropdowns() {
@@ -142,6 +159,7 @@ function bindTabs() {
 
 function switchTab(name) {
   activeTab = name;
+  localStorage.setItem('activeTab', name);
 
   document.querySelectorAll('.nav-item').forEach(b =>
     b.classList.toggle('active', b.dataset.tab === name)
@@ -190,6 +208,7 @@ function initUploadTab() {
         syncMsg.textContent = `تمت المزامنة · ${data.saved ?? data.count} موظف · ${data.companies ?? 0} شركة`;
         syncMsg.style.color = '#22d3ee';
         await Promise.all([loadEmployees(), loadCompanies()]);
+        saveCache();
         refreshUploadDropdowns();
       } else {
         syncMsg.textContent = data.error || 'فشلت المزامنة';
@@ -220,6 +239,7 @@ function initUploadTab() {
         msg.style.color = '#f87171';
         employees = [];
         companies = [];
+        saveCache();
         refreshUploadDropdowns();
       } else {
         msg.textContent = data.error || 'فشل الحذف';
