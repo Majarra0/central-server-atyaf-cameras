@@ -92,6 +92,80 @@ function extractSid(setCookieHeaders) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// FRIGATE AUTH  (port 8971 — server-side API calls only, not the browser /proxy)
+//
+// Local sites should tunnel Frigate :8971 (authenticated) to the central remote
+// port. face_sync keeps using http://frigate:5000 inside the Docker network.
+// Set FRIGATE_USER + FRIGATE_PASSWORD on the central server (or per-site in
+// sites.json) so snapshot/event API routes can authenticate; the /proxy iframe
+// does NOT inject credentials so users still see Frigate's own login screen.
+// ══════════════════════════════════════════════════════════════════════════════
+const FRIGATE_GLOBAL_USER = process.env.FRIGATE_USER     || '';
+const FRIGATE_GLOBAL_PASS = process.env.FRIGATE_PASSWORD || '';
+const frigateTokens       = new Map(); // siteId -> { token, expires }
+
+function getFrigateCredentials(site) {
+  const user = site.frigateUser     || FRIGATE_GLOBAL_USER;
+  const pass = site.frigatePassword || FRIGATE_GLOBAL_PASS;
+  return user && pass ? { user, pass } : null;
+}
+
+function extractFrigateToken(setCookieHeaders, body) {
+  if (body?.access_token) return body.access_token;
+  if (body?.token)        return body.token;
+  if (!setCookieHeaders)  return null;
+  const arr = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+  for (const c of arr) {
+    const m = /(?:^|;\s*)(?:frigate_token|token)=([^;]+)/i.exec(c);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+async function getFrigateToken(site) {
+  const creds = getFrigateCredentials(site);
+  if (!creds) return null;
+
+  const cached = frigateTokens.get(site.id);
+  if (cached && cached.expires > Date.now()) return cached.token;
+
+  const base = site.frigateUrl.replace(/\/$/, '');
+  try {
+    const r = await fetch(`${base}/api/login`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ user: creds.user, password: creds.password }),
+      signal:  AbortSignal.timeout(10000)
+    });
+    if (!r.ok) {
+      console.warn(`[frigate] login failed for ${site.id}: HTTP ${r.status}`);
+      return null;
+    }
+
+    let setCookies = [];
+    if (typeof r.headers.getSetCookie === 'function') {
+      setCookies = r.headers.getSetCookie();
+    } else {
+      const raw = r.headers.raw?.()?.['set-cookie'];
+      setCookies = raw || [r.headers.get('set-cookie')].filter(Boolean);
+    }
+
+    const body  = await r.json().catch(() => ({}));
+    const token = extractFrigateToken(setCookies, body);
+    if (!token) {
+      console.warn(`[frigate] no token in login response for ${site.id}`);
+      return null;
+    }
+
+    frigateTokens.set(site.id, { token, expires: Date.now() + 11 * 60 * 60 * 1000 });
+    return token;
+  } catch (e) {
+    console.warn(`[frigate] login error for ${site.id}:`, e.message);
+    return null;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // AUTH GATE
 //
 // Public:
@@ -241,11 +315,19 @@ function sanitize(str) {
 
 function findSite(id) { return sites.find(s => s.id === id); }
 
-async function proxyFetch(url, init = {}) {
+async function proxyFetch(url, init = {}, site = null) {
+  const headers = { ...(init.headers || {}) };
+  if (site) {
+    const token = await getFrigateToken(site);
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6000);
-  try { return await fetch(url, { ...init, signal: ctrl.signal }); }
-  finally { clearTimeout(t); }
+  try {
+    return await fetch(url, { ...init, headers, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 // ── Multer ────────────────────────────────────────────────────────────────────
@@ -360,7 +442,7 @@ app.get('/api/sites/:siteId/status', async (req, res) => {
   const site = findSite(req.params.siteId);
   if (!site) return res.status(404).json({ error: 'الموقع غير موجود' });
   try {
-    const r    = await proxyFetch(`${site.frigateUrl}/api/version`);
+    const r    = await proxyFetch(`${site.frigateUrl}/api/version`, {}, site);
     const data = await r.json();
     res.json({ online: true, version: data.version });
   } catch {
@@ -373,7 +455,9 @@ app.get('/api/sites/:siteId/snapshot/:camera', async (req, res) => {
   if (!site) return res.status(404).end();
   try {
     const r = await proxyFetch(
-      `${site.frigateUrl}/api/${encodeURIComponent(req.params.camera)}/latest.jpg`
+      `${site.frigateUrl}/api/${encodeURIComponent(req.params.camera)}/latest.jpg`,
+      {},
+      site
     );
     if (!r.ok) return res.status(r.status).end();
     res.set('Content-Type', 'image/jpeg');
@@ -390,7 +474,7 @@ app.get('/api/sites/:siteId/events', async (req, res) => {
   try {
     const url = new URL(`${site.frigateUrl}/api/events`);
     Object.entries(req.query).forEach(([k, v]) => url.searchParams.set(k, v));
-    const r    = await proxyFetch(url.toString());
+    const r    = await proxyFetch(url.toString(), {}, site);
     const data = await r.json();
     res.json(data);
   } catch {
@@ -403,7 +487,9 @@ app.get('/api/sites/:siteId/events/:eventId/snapshot', async (req, res) => {
   if (!site) return res.status(404).end();
   try {
     const r = await proxyFetch(
-      `${site.frigateUrl}/api/events/${req.params.eventId}/snapshot.jpg`
+      `${site.frigateUrl}/api/events/${req.params.eventId}/snapshot.jpg`,
+      {},
+      site
     );
     if (!r.ok) return res.status(r.status).end();
     res.set('Content-Type', 'image/jpeg');
@@ -418,7 +504,9 @@ app.get('/api/sites/:siteId/events/:eventId/clip', async (req, res) => {
   if (!site) return res.status(404).end();
   try {
     const r = await proxyFetch(
-      `${site.frigateUrl}/api/events/${req.params.eventId}/clip.mp4`
+      `${site.frigateUrl}/api/events/${req.params.eventId}/clip.mp4`,
+      {},
+      site
     );
     if (!r.ok) return res.status(r.status).end();
     res.set('Content-Type', 'video/mp4');

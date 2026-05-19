@@ -60,6 +60,15 @@ Edit `backend/sites.json`. Add one entry per local Frigate computer:
 ]
 ```
 
+Each local site must tunnel Frigate's **authenticated port 8971** (`localPort = 8971` in `frpc.toml`). The central `frigateUrl` still uses the tunnel's `remotePort` (e.g. `15001`).
+
+Add Frigate credentials to the central `.env` so snapshot/event API routes work (the browser `/proxy` iframe does **not** auto-login — users see Frigate's login page):
+
+```bash
+FRIGATE_USER=admin
+FRIGATE_PASSWORD=your_frigate_password
+```
+
 Port scheme — each site needs a unique `remotePort` in its `frpc.toml` that matches `frigateUrl` here:
 
 | Site | frigateUrl port | frpc remotePort |
