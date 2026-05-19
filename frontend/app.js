@@ -1,35 +1,167 @@
-// ── State ─────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════════════════
 let sites      = [];
 let employees  = [];
 let companies  = [];
 let snapTimers = {};
 let activeTab  = 'upload';
+let currentUser = null;
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
+// Persisted form selection
+const FORM_KEY = 'upload_form_state';
+
+function loadFormState() {
+  try { return JSON.parse(localStorage.getItem(FORM_KEY)) || {}; }
+  catch { return {}; }
+}
+
+function saveFormState(patch) {
+  const cur = loadFormState();
+  localStorage.setItem(FORM_KEY, JSON.stringify({ ...cur, ...patch }));
+}
+
+function clearFormState() { localStorage.removeItem(FORM_KEY); }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════════════════════════
 (async () => {
-  // Restore from cache immediately so UI is usable before network responds
+  startClock();
+
+  // Show login or app based on session
+  const me = await checkAuth();
+  if (!me) {
+    showLogin();
+  } else {
+    currentUser = me;
+    await startApp({ autoSync: false });
+  }
+
+  bindLoginForm();
+})();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════════════════════════════════
+async function checkAuth() {
+  try {
+    const r = await fetch('/api/me');
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.authenticated ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+function showLogin() {
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  setTimeout(() => document.getElementById('loginUser')?.focus(), 100);
+}
+
+function showApp() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+}
+
+function bindLoginForm() {
+  const form    = document.getElementById('loginForm');
+  const userEl  = document.getElementById('loginUser');
+  const passEl  = document.getElementById('loginPass');
+  const btn     = document.getElementById('loginBtn');
+  const msgEl   = document.getElementById('loginMsg');
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    hideMsg(msgEl);
+    const username = userEl.value.trim();
+    const password = passEl.value;
+    if (!username || !password) {
+      return showMsg(msgEl, 'error', 'الرجاء إدخال اسم المستخدم وكلمة المرور');
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'جارٍ التحقق...';
+
+    try {
+      const r = await fetch('/api/login', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ username, password })
+      });
+      const data = await r.json().catch(() => ({}));
+
+      if (r.ok && data.success) {
+        currentUser = { user: data.user, fullName: data.fullName };
+        passEl.value = '';
+        showMsg(msgEl, 'success', 'تم تسجيل الدخول — جارٍ مزامنة الموظفين...');
+        await startApp({ autoSync: true });
+      } else {
+        showMsg(msgEl, 'error', data.error || 'فشل تسجيل الدخول');
+      }
+    } catch {
+      showMsg(msgEl, 'error', 'تعذّر الاتصال بالخادم');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'تسجيل الدخول';
+    }
+  });
+}
+
+async function logout() {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+  currentUser = null;
+  sites = []; employees = []; companies = [];
+  saveCache();
+  clearFormState();
+  location.reload();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// APP START
+// ══════════════════════════════════════════════════════════════════════════════
+async function startApp({ autoSync }) {
+  showApp();
+
+  // Show user name in topbar
+  if (currentUser?.fullName) {
+    document.getElementById('userName').textContent = currentUser.fullName;
+  }
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    if (confirm('تسجيل الخروج؟')) logout();
+  });
+
   loadCache();
   initUploadTab();
   initEventsTab();
   initFacesTab();
   bindTabs();
   bindModals();
-  startClock();
 
   // Restore last active tab (skip 'live' since that tab is hidden)
   const savedTab = localStorage.getItem('activeTab');
   switchTab(savedTab && savedTab !== 'live' ? savedTab : 'upload');
 
-  // Fetch fresh data in background, update UI when done
+  // Load fresh data
   await Promise.all([loadSites(), loadEmployees(), loadCompanies()]);
   saveCache();
   refreshUploadDropdowns();
-  initEventsTab();          // re-populate site dropdown with fresh sites
-})();
+  initEventsTab(); // re-populate site dropdown with fresh sites
 
-// ── Clock ─────────────────────────────────────────────────────────────────────
+  // Auto-sync after fresh login
+  if (autoSync) {
+    await runSync({ silent: false });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════════════════════════════════════════
 function startClock() {
   const el = document.getElementById('clock');
+  if (!el) return;
   const tick = () => {
     const now = new Date();
     el.textContent = now.toLocaleTimeString('ar-SA', { hour12: false });
@@ -38,7 +170,9 @@ function startClock() {
   setInterval(tick, 1000);
 }
 
-// ── Cache ─────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// CACHE
+// ══════════════════════════════════════════════════════════════════════════════
 function loadCache() {
   try { sites     = JSON.parse(localStorage.getItem('cache_sites'))     || []; } catch { sites = []; }
   try { employees = JSON.parse(localStorage.getItem('cache_employees')) || []; } catch { employees = []; }
@@ -51,41 +185,62 @@ function saveCache() {
   try { localStorage.setItem('cache_companies', JSON.stringify(companies)); } catch {}
 }
 
-// ── Sites ─────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// DATA LOADERS
+// ══════════════════════════════════════════════════════════════════════════════
+async function authedFetch(url, opts) {
+  const r = await fetch(url, opts);
+  if (r.status === 401) {
+    showLogin();
+    throw new Error('not authenticated');
+  }
+  return r;
+}
+
 async function loadSites() {
   try {
-    const r = await fetch('/api/sites');
+    const r = await authedFetch('/api/sites');
     sites = await r.json();
   } catch {}
 }
 
-// ── Employees ─────────────────────────────────────────────────────────────────
 async function loadEmployees() {
   try {
-    const r = await fetch('/api/employees');
+    const r = await authedFetch('/api/employees');
     employees = await r.json();
   } catch {}
 }
 
 async function loadCompanies() {
   try {
-    const r = await fetch('/api/companies');
+    const r = await authedFetch('/api/companies');
     companies = await r.json();
   } catch {}
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// UPLOAD DROPDOWNS
+// ══════════════════════════════════════════════════════════════════════════════
 function refreshUploadDropdowns() {
-  const company = document.getElementById('company')?.value || '';
-  const branch  = document.getElementById('branch')?.value  || '';
+  const saved = loadFormState();
+
   populateCompanyDropdown();
-  if (company) {
-    document.getElementById('company').value = company;
-    populateBranchDropdown(company);
-    if (branch) {
-      document.getElementById('branch').value = branch;
-      populateEmployeeDropdown(company, branch);
-    }
+
+  const companyEl = document.getElementById('company');
+  if (saved.company && companyEl && [...companyEl.options].some(o => o.value === saved.company)) {
+    companyEl.value = saved.company;
   }
+  const company = companyEl?.value || '';
+
+  populateBranchDropdown(company);
+  const branchEl = document.getElementById('branch');
+  if (saved.branch && branchEl && [...branchEl.options].some(o => o.value === saved.branch)) {
+    branchEl.value = saved.branch;
+  }
+  const branch = branchEl?.value || '';
+
+  // Refresh combobox list, restore selected employee if still present
+  refreshEmployeeCombo(company, branch, saved.employee_id);
 }
 
 function populateCompanyDropdown() {
@@ -94,7 +249,6 @@ function populateCompanyDropdown() {
   const current = sel.value;
   sel.innerHTML = '<option value="" disabled>اختر الشركة...</option>';
   const seen = new Set();
-  // Company doctype first (authoritative, all companies even with no employees)
   companies.forEach(c => {
     if (c && !seen.has(c)) {
       seen.add(c);
@@ -103,7 +257,6 @@ function populateCompanyDropdown() {
       sel.appendChild(opt);
     }
   });
-  // Employees as fallback (in case companies weren't synced yet)
   employees.forEach(e => {
     if (e.company && !seen.has(e.company)) {
       seen.add(e.company);
@@ -134,24 +287,114 @@ function populateBranchDropdown(company) {
   if (current && seen.has(current)) sel.value = current;
 }
 
-function populateEmployeeDropdown(company, branch) {
-  const sel = document.getElementById('employeeSelect');
-  if (!sel) return;
-  sel.innerHTML = '<option value="" disabled>اختر الموظف...</option>';
-  employees
+// ══════════════════════════════════════════════════════════════════════════════
+// SEARCHABLE EMPLOYEE COMBOBOX
+// ══════════════════════════════════════════════════════════════════════════════
+function refreshEmployeeCombo(company, branch, preselectId) {
+  const filtered = employees
     .filter(e => (!company || e.company === company) && (!branch || e.branch === branch))
-    .sort((a, b) => (a.employee_name || '').localeCompare(b.employee_name || '', 'ar'))
-    .forEach(e => {
-      const opt = document.createElement('option');
-      opt.value = e.employee_id;
-      opt.textContent = e.employee_name
-        ? `${e.employee_name} (${e.employee_id})`
-        : e.employee_id;
-      sel.appendChild(opt);
-    });
+    .sort((a, b) => (a.employee_name || '').localeCompare(b.employee_name || '', 'ar'));
+
+  const combo  = document.getElementById('employeeCombo');
+  const input  = document.getElementById('employeeSearch');
+  const hidden = document.getElementById('employeeSelect');
+
+  combo._all = filtered;
+
+  // If preselected employee is still in the filtered set, restore it
+  if (preselectId) {
+    const pre = filtered.find(e => e.employee_id === preselectId);
+    if (pre) {
+      hidden.value = pre.employee_id;
+      input.value  = formatEmployeeLabel(pre);
+      renderComboPanel(filtered, pre.employee_id);
+      return;
+    }
+  }
+
+  hidden.value = '';
+  input.value  = '';
+  renderComboPanel(filtered, null);
 }
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
+function formatEmployeeLabel(e) {
+  return e.employee_name ? `${e.employee_name} (${e.employee_id})` : e.employee_id;
+}
+
+function renderComboPanel(list, selectedId) {
+  const panel = document.getElementById('employeePanel');
+  if (!list.length) {
+    panel.innerHTML = `<div class="combobox-empty">لا توجد نتائج</div>`;
+    return;
+  }
+  panel.innerHTML = list.slice(0, 200).map(e => `
+    <div class="combobox-option${e.employee_id === selectedId ? ' active' : ''}"
+         data-id="${escAttr(e.employee_id)}">
+      <span class="combobox-option-name">${esc(e.employee_name || e.employee_id)}</span>
+      <span class="combobox-option-meta">${esc(e.employee_id)} · ${esc(e.branch || '')} · ${esc(e.company || '')}</span>
+    </div>
+  `).join('');
+
+  panel.querySelectorAll('.combobox-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      const id   = opt.dataset.id;
+      const emp  = list.find(e => e.employee_id === id);
+      const inp  = document.getElementById('employeeSearch');
+      const hide = document.getElementById('employeeSelect');
+      inp.value  = formatEmployeeLabel(emp);
+      hide.value = emp.employee_id;
+      saveFormState({ employee_id: emp.employee_id });
+      closeCombo();
+    });
+  });
+}
+
+function openCombo() {
+  document.getElementById('employeeCombo').classList.add('open');
+  document.getElementById('employeePanel').classList.remove('hidden');
+}
+
+function closeCombo() {
+  document.getElementById('employeeCombo').classList.remove('open');
+  document.getElementById('employeePanel').classList.add('hidden');
+}
+
+function bindEmployeeCombo() {
+  const combo = document.getElementById('employeeCombo');
+  const input = document.getElementById('employeeSearch');
+
+  input.addEventListener('focus', () => {
+    const list = combo._all || [];
+    renderComboPanel(list, document.getElementById('employeeSelect').value || null);
+    openCombo();
+  });
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    const all = combo._all || [];
+    const filtered = !q
+      ? all
+      : all.filter(e =>
+          (e.employee_name || '').toLowerCase().includes(q) ||
+          e.employee_id.toLowerCase().includes(q));
+    renderComboPanel(filtered, null);
+    openCombo();
+    // Typing without selecting clears the hidden value until they pick
+    document.getElementById('employeeSelect').value = '';
+  });
+
+  document.addEventListener('click', e => {
+    if (!combo.contains(e.target)) closeCombo();
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeCombo();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ══════════════════════════════════════════════════════════════════════════════
 function bindTabs() {
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -169,12 +412,50 @@ function switchTab(name) {
     p.classList.toggle('hidden', p.id !== `tab-${name}`)
   );
 
-  if (name === 'live') {
-    renderLiveGrid();
-  } else {
-    stopAllSnapshots();
-  }
+  if (name === 'live') renderLiveGrid();
+  else                  stopAllSnapshots();
+
   if (name === 'faces') loadFacesList();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SYNC (runnable from button OR auto right after login)
+// ══════════════════════════════════════════════════════════════════════════════
+async function runSync({ silent }) {
+  const syncBtn = document.getElementById('syncEmployeesBtn');
+  const syncMsg = document.getElementById('syncMsg');
+  if (syncBtn) syncBtn.disabled = true;
+  if (syncMsg && !silent) {
+    syncMsg.textContent = 'جارٍ المزامنة...';
+    syncMsg.style.color = 'var(--text-muted)';
+  }
+  try {
+    const r = await fetch('/api/employees/sync', { method: 'POST' });
+    if (r.status === 401) {
+      showLogin();
+      return;
+    }
+    const data = await r.json();
+    if (r.ok) {
+      if (syncMsg) {
+        syncMsg.textContent = `تمت المزامنة · ${data.saved ?? 0} موظف · ${data.companies ?? 0} شركة`;
+        syncMsg.style.color = '#22d3ee';
+      }
+      await Promise.all([loadEmployees(), loadCompanies()]);
+      saveCache();
+      refreshUploadDropdowns();
+    } else if (syncMsg) {
+      syncMsg.textContent = data.error || 'فشلت المزامنة';
+      syncMsg.style.color = '#f87171';
+    }
+  } catch {
+    if (syncMsg) {
+      syncMsg.textContent = 'تعذّر الاتصال بالخادم';
+      syncMsg.style.color = '#f87171';
+    }
+  } finally {
+    if (syncBtn) syncBtn.disabled = false;
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -182,49 +463,22 @@ function switchTab(name) {
 // ══════════════════════════════════════════════════════════════════════════════
 function initUploadTab() {
   populateCompanyDropdown();
+  bindEmployeeCombo();
 
   document.getElementById('company').addEventListener('change', function () {
+    saveFormState({ company: this.value, branch: '', employee_id: '' });
     populateBranchDropdown(this.value);
-    populateEmployeeDropdown(this.value, '');
+    refreshEmployeeCombo(this.value, '', null);
   });
 
   document.getElementById('branch').addEventListener('change', function () {
     const company = document.getElementById('company').value;
-    populateEmployeeDropdown(company, this.value);
+    saveFormState({ branch: this.value, employee_id: '' });
+    refreshEmployeeCombo(company, this.value, null);
   });
 
-  // No change listener needed — employee is read directly from select at submit time
+  document.getElementById('syncEmployeesBtn').addEventListener('click', () => runSync({ silent: false }));
 
-  // Sync button
-  const syncBtn = document.getElementById('syncEmployeesBtn');
-  const syncMsg = document.getElementById('syncMsg');
-
-  syncBtn.addEventListener('click', async () => {
-    syncBtn.disabled = true;
-    syncMsg.textContent = 'جارٍ المزامنة...';
-    syncMsg.style.color = 'var(--text-muted)';
-    try {
-      const r    = await fetch('/api/employees/sync', { method: 'POST' });
-      const data = await r.json();
-      if (r.ok) {
-        syncMsg.textContent = `تمت المزامنة · ${data.saved ?? data.count} موظف · ${data.companies ?? 0} شركة`;
-        syncMsg.style.color = '#22d3ee';
-        await Promise.all([loadEmployees(), loadCompanies()]);
-        saveCache();
-        refreshUploadDropdowns();
-      } else {
-        syncMsg.textContent = data.error || 'فشلت المزامنة';
-        syncMsg.style.color = '#f87171';
-      }
-    } catch {
-      syncMsg.textContent = 'تعذّر الاتصال بالخادم';
-      syncMsg.style.color = '#f87171';
-    } finally {
-      syncBtn.disabled = false;
-    }
-  });
-
-  // Reset button
   document.getElementById('resetAllBtn').addEventListener('click', async () => {
     const password = prompt('أدخل كلمة المرور لتأكيد الحذف:');
     if (!password) return;
@@ -239,9 +493,9 @@ function initUploadTab() {
       if (r.ok) {
         msg.textContent = 'تم حذف جميع البيانات والملفات';
         msg.style.color = '#f87171';
-        employees = [];
-        companies = [];
+        employees = []; companies = [];
         saveCache();
+        clearFormState();
         refreshUploadDropdowns();
       } else {
         msg.textContent = data.error || 'فشل الحذف';
@@ -283,9 +537,7 @@ function initUploadTab() {
 
     const company    = document.getElementById('company').value;
     const branch     = document.getElementById('branch').value;
-    const empSelVal  = document.getElementById('employeeSelect').value;
-    const empRecord  = employees.find(e => e.employee_id === empSelVal);
-    const employeeId = empRecord?.employee_id || '';
+    const employeeId = document.getElementById('employeeSelect').value;
     const file       = fileInput.files[0];
 
     if (!company)    return showMsg(msgEl, 'error', 'يرجى اختيار الشركة');
@@ -307,25 +559,21 @@ function initUploadTab() {
     fd.append('employee_id', employeeId);
     fd.append('branch',      branch);
     fd.append('company',     company);
-    fd.append('picture',       file);
+    fd.append('picture',     file);
 
     try {
-      const res  = await fetch('/api/upload', { method: 'POST', body: fd });
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (res.status === 401) { showLogin(); return; }
       const data = await res.json();
 
       if (res.ok) {
         showMsg(msgEl, 'success', data.message);
-        document.getElementById('company').value        = '';
-        document.getElementById('branch').value         = '';
-        document.getElementById('employeeSelect').value = '';
+        // Reset only the photo selection; keep company/branch/employee for batch uploads
         fileInput.value      = '';
         fileName.textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
         fileDrop.classList.remove('active');
         preview.classList.add('hidden');
         preview.src = '';
-        populateCompanyDropdown();
-        populateBranchDropdown('');
-        populateEmployeeDropdown('', '');
       } else {
         showMsg(msgEl, 'error', data.error || 'حدث خطأ غير متوقع');
       }
@@ -508,13 +756,23 @@ function initEventsTab() {
   const siteSel = document.getElementById('evtSite');
   const camSel  = document.getElementById('evtCamera');
   const loadBtn = document.getElementById('loadEventsBtn');
+  if (!siteSel) return;
 
+  // Rebuild the site list (preserve current selection if still valid)
+  const currentSite = siteSel.value;
+  siteSel.innerHTML = '<option value="">— اختر الفرع —</option>';
   sites.forEach(s => {
     const opt = document.createElement('option');
     opt.value = s.id;
     opt.textContent = s.branch;
     siteSel.appendChild(opt);
   });
+  if (currentSite && sites.some(s => s.id === currentSite)) {
+    siteSel.value = currentSite;
+  }
+
+  if (siteSel._bound) return;
+  siteSel._bound = true;
 
   siteSel.addEventListener('change', () => {
     camSel.innerHTML = '<option value="">جميع الكاميرات</option>';
@@ -653,12 +911,15 @@ function closeSnapModal() {
   document.getElementById('snapImg').src = '';
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
 function esc(str) {
-  return String(str)
+  return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+function escAttr(s) { return esc(s); }
 
 function getBranch(siteId) {
   const s = sites.find(x => x.id === siteId);
@@ -680,7 +941,10 @@ function hideMsg(el) {
 // ══════════════════════════════════════════════════════════════════════════════
 function initFacesTab() {
   document.getElementById('refreshFacesBtn').addEventListener('click', loadFacesList);
+  document.getElementById('facesSearch').addEventListener('input', applyFacesFilter);
 }
+
+let _facesRows = [];
 
 async function loadFacesList() {
   const list  = document.getElementById('facesList');
@@ -698,6 +962,7 @@ async function loadFacesList() {
 
   try {
     const r    = await fetch('/api/saved-faces');
+    if (r.status === 401) { showLogin(); return; }
     const data = await r.json();
 
     if (!data.length) {
@@ -711,19 +976,33 @@ async function loadFacesList() {
       return;
     }
 
-    const totalPhotos = data.reduce((s, e) => s + e.photoCount, 0);
-    stats.innerHTML = `
-      <div class="faces-stat-bar">
-        <span class="faces-stat"><strong>${data.length}</strong> موظف مسجل</span>
-        <span class="faces-stat-sep">·</span>
-        <span class="faces-stat"><strong>${totalPhotos}</strong> صورة إجمالاً</span>
-      </div>`;
-
+    _facesRows = data;
+    renderFacesStats(data);
     list.innerHTML = '';
     data.forEach(emp => list.appendChild(buildFaceRow(emp)));
+    applyFacesFilter();
   } catch {
     list.innerHTML = `<div class="empty-state"><span>تعذّر تحميل البيانات</span></div>`;
   }
+}
+
+function renderFacesStats(data) {
+  const totalPhotos = data.reduce((s, e) => s + e.photoCount, 0);
+  document.getElementById('facesStats').innerHTML = `
+    <div class="faces-stat-bar">
+      <span class="faces-stat"><strong>${data.length}</strong> موظف مسجل</span>
+      <span class="faces-stat-sep">·</span>
+      <span class="faces-stat"><strong>${totalPhotos}</strong> صورة إجمالاً</span>
+    </div>`;
+}
+
+function applyFacesFilter() {
+  const q = document.getElementById('facesSearch').value.trim().toLowerCase();
+  const rows = document.querySelectorAll('.face-row');
+  rows.forEach(r => {
+    const hay = (r.dataset.search || '').toLowerCase();
+    r.classList.toggle('filter-hidden', q && !hay.includes(q));
+  });
 }
 
 function buildFaceRow(emp) {
@@ -734,6 +1013,7 @@ function buildFaceRow(emp) {
   const row = document.createElement('div');
   row.className = 'face-row';
   row.dataset.id = emp.employee_id;
+  row.dataset.search = [emp.employee_id, emp.employee_name, emp.branch, emp.company].filter(Boolean).join(' ');
 
   row.innerHTML = `
     <div class="face-thumb-wrap">
@@ -780,12 +1060,13 @@ async function deleteFace(emp, row) {
   btn.disabled = true;
   try {
     const r = await fetch(`/api/saved-faces/${encodeURIComponent(emp.employee_id)}`, { method: 'DELETE' });
+    if (r.status === 401) { showLogin(); return; }
     if (r.ok) {
       row.style.transition = 'opacity .25s';
       row.style.opacity    = '0';
       setTimeout(() => {
         row.remove();
-        updateFacesStats();
+        updateFacesStatsAfterDelete();
       }, 260);
     } else {
       const d = await r.json();
@@ -798,11 +1079,10 @@ async function deleteFace(emp, row) {
   }
 }
 
-function updateFacesStats() {
+function updateFacesStatsAfterDelete() {
   const rows  = document.querySelectorAll('.face-row');
-  const stats = document.getElementById('facesStats');
   if (!rows.length) {
-    stats.innerHTML = '';
+    document.getElementById('facesStats').innerHTML = '';
     document.getElementById('facesList').innerHTML = `
       <div class="empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
@@ -817,6 +1097,7 @@ function updateFacesStats() {
     const txt = r.querySelector('.face-count')?.textContent || '';
     return s + (parseInt(txt) || 0);
   }, 0);
+  const stats = document.getElementById('facesStats');
   const bar = stats.querySelector('.faces-stat-bar');
   if (bar) {
     bar.innerHTML = `

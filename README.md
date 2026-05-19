@@ -15,14 +15,14 @@ Arabic-language central monitoring dashboard for multiple Frigate NVR sites conn
 
 - Ubuntu/Debian VPS with a public IP
 - Docker + Docker Compose
-- Ports **3000** (dashboard) and **7000** (frp tunnels) open in the firewall
+- Ports **8080** (dashboard) and **7000** (frp tunnels) open in the firewall
 
 ## Setup
 
 ### 1. Open firewall ports
 
 ```bash
-sudo ufw allow 3000/tcp
+sudo ufw allow 8080/tcp
 sudo ufw allow 7000/tcp
 sudo ufw enable
 ```
@@ -76,10 +76,13 @@ docker compose up -d --build
 
 # Verify
 docker ps
-curl http://localhost:3000/api/sites
+curl http://localhost:8080/api/health
 ```
 
-Open `http://YOUR_SERVER_IP:3000` in a browser.
+Open `http://YOUR_SERVER_IP:8080` in a browser. Sign in with your Frappe
+username and password — the dashboard reuses the Frappe session for all
+employee/company calls, and runs an initial sync automatically right after
+login.
 
 ### 5. Adding a new site later
 
@@ -96,7 +99,7 @@ docker compose restart dashboard
 Local Site A ──frpc──┐
 Local Site B ──frpc──┤──► frps (port 7000)
 Local Site N ──frpc──┘         │
-                        Dashboard (port 3000)
+                        Dashboard (port 8080)
                         proxies all traffic
 ```
 

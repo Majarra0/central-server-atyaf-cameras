@@ -1,19 +1,19 @@
 try { require('dotenv').config(); } catch {}
 
-const express    = require('express');
-const multer     = require('multer');
-const path       = require('path');
-const fs         = require('fs');
+const express      = require('express');
+const cookieParser = require('cookie-parser');
+const multer       = require('multer');
+const path         = require('path');
+const fs           = require('fs');
+const crypto       = require('crypto');
 const { Readable } = require('stream');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const db         = require('./db');
+const db           = require('./db');
 
-const FRAPPE_BASE       = (process.env.FRAPPE_BASE_URL || 'https://dr-atyaf.e2next.com').replace(/\/$/, '');
-const FRAPPE_API_KEY    = process.env.FRAPPE_API_KEY    || '';
-const FRAPPE_API_SECRET = process.env.FRAPPE_API_SECRET || '';
+const FRAPPE_BASE = (process.env.FRAPPE_BASE_URL || 'https://dr-atyaf.e2next.com').replace(/\/$/, '');
 
 const app   = express();
-const PORT  = 3000;
+const PORT  = parseInt(process.env.PORT, 10) || 3000;
 const FACES = path.join(__dirname, 'faces');
 
 // ── Sites ─────────────────────────────────────────────────────────────────────
@@ -24,10 +24,122 @@ try {
   console.warn('[warn] sites.json missing or invalid — no sites loaded');
 }
 
-// ── Static frontend ───────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// PARSERS
+// ══════════════════════════════════════════════════════════════════════════════
+app.use(cookieParser());
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: false }));
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SESSIONS  (in-memory; lost on restart — acceptable for this dashboard)
+// ══════════════════════════════════════════════════════════════════════════════
+const SESSION_COOKIE = 'central_session';
+const SESSION_TTL_MS = 1000 * 60 * 60 * 12;     // 12h
+const sessions       = new Map();                // ourId -> { sid, user, fullName, expires }
+
+function newSessionId()  { return crypto.randomBytes(24).toString('hex'); }
+
+function getSession(req) {
+  const id = req.cookies?.[SESSION_COOKIE];
+  if (!id) return null;
+  const s = sessions.get(id);
+  if (!s) return null;
+  if (s.expires < Date.now()) { sessions.delete(id); return null; }
+  return { id, ...s };
+}
+
+function setSessionCookie(res, id) {
+  res.cookie(SESSION_COOKIE, id, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge:   SESSION_TTL_MS
+  });
+}
+
+function clearSessionCookie(res) { res.clearCookie(SESSION_COOKIE); }
+
+// Periodic prune
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of sessions) if (v.expires < now) sessions.delete(k);
+}, 60 * 1000).unref();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FRAPPE HELPERS  (use the logged-in user's sid for every call)
+// ══════════════════════════════════════════════════════════════════════════════
+function frappeFetch(sid, urlPath, init = {}, timeoutMs = 20000) {
+  const url = `${FRAPPE_BASE}${urlPath}`;
+  const headers = {
+    'Cookie': `sid=${sid}`,
+    ...(init.headers || {})
+  };
+  return fetch(url, {
+    ...init,
+    headers,
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+}
+
+function extractSid(setCookieHeaders) {
+  if (!setCookieHeaders) return null;
+  const arr = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+  for (const c of arr) {
+    const m = /(?:^|;\s*)sid=([^;]+)/.exec(c);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTH GATE
+//
+// Public:
+//   - Static frontend (handled by express.static below)
+//   - POST /api/login        (issues session)
+//   - POST /api/logout       (clears session)
+//   - GET  /api/me           (used by frontend to check auth state)
+//   - GET  /api/health
+//   - GET  /api/faces/manifest, /api/faces/file/*  (polled by local site agents
+//                                                   over the trusted frp tunnel)
+//
+// Everything else under /api/* and /proxy/* requires a logged-in session.
+// ══════════════════════════════════════════════════════════════════════════════
+function isPublicApiPath(p) {
+  return (
+    p === '/api/login'   ||
+    p === '/api/logout'  ||
+    p === '/api/me'      ||
+    p === '/api/health'  ||
+    p === '/api/faces/manifest' ||
+    p.startsWith('/api/faces/file/')
+  );
+}
+
+function authGate(req, res, next) {
+  const p = req.path;
+
+  const needsAuth =
+    p.startsWith('/proxy/') ||
+    (p.startsWith('/api/') && !isPublicApiPath(p));
+
+  if (!needsAuth) return next();
+
+  const s = getSession(req);
+  if (!s) {
+    if (p.startsWith('/api/')) return res.status(401).json({ error: 'يلزم تسجيل الدخول' });
+    return res.status(401).send('يلزم تسجيل الدخول');
+  }
+  req.session = s;
+  next();
+}
+
+app.use(authGate);
+
+// Static frontend (login.html + index.html + assets)
 app.use(express.static(path.join(__dirname, '../frontend')));
 
-// ── Per-site transparent proxy (HTTP + WebSocket) ─────────────────────────────
+// ── Per-site transparent proxy (HTTP + WebSocket) — auth-gated by authGate ──
 sites.forEach(site => {
   app.use(
     `/proxy/${site.id}`,
@@ -47,7 +159,81 @@ sites.forEach(site => {
   );
 });
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// LOGIN / LOGOUT / ME
+// ══════════════════════════════════════════════════════════════════════════════
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
+  }
+
+  let r;
+  try {
+    const body = new URLSearchParams({ usr: username, pwd: password });
+    r = await fetch(`${FRAPPE_BASE}/api/method/login`, {
+      method:   'POST',
+      headers:  { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal:   AbortSignal.timeout(15000),
+      redirect: 'manual'
+    });
+  } catch (e) {
+    return res.status(503).json({ error: `تعذّر الاتصال بخادم Frappe: ${e.message}` });
+  }
+
+  if (!r.ok) {
+    return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+  }
+
+  let setCookies = [];
+  if (typeof r.headers.getSetCookie === 'function') {
+    setCookies = r.headers.getSetCookie();
+  } else {
+    const raw = r.headers.raw?.()?.['set-cookie'];
+    setCookies = raw || r.headers.get('set-cookie') || [];
+  }
+
+  const sid = extractSid(setCookies);
+  if (!sid || sid === 'Guest') {
+    return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+  }
+
+  let info = {};
+  try { info = await r.json(); } catch {}
+
+  const fullName = info.full_name || info.message || username;
+
+  const id = newSessionId();
+  sessions.set(id, {
+    sid,
+    user:     username,
+    fullName,
+    expires:  Date.now() + SESSION_TTL_MS
+  });
+  setSessionCookie(res, id);
+
+  res.json({ success: true, user: username, fullName });
+});
+
+app.post('/api/logout', (req, res) => {
+  const s = getSession(req);
+  if (s) sessions.delete(s.id);
+  clearSessionCookie(res);
+  res.json({ success: true });
+});
+
+app.get('/api/me', (req, res) => {
+  const s = getSession(req);
+  if (!s) return res.status(401).json({ authenticated: false });
+  res.json({ authenticated: true, user: s.user, fullName: s.fullName });
+});
+
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
 function sanitize(str) {
   const s = str.trim().replace(/[\/\\<>:"|?*\x00-\x1f]/g, '_');
   return /^\.+$/.test(s) ? '_' : s;
@@ -88,7 +274,6 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
     return res.status(400).json({ error: 'بيانات الموظف والفرع مطلوبة' });
   }
 
-  // employees table = upload records only; never written by sync
   const row = db.prepare('SELECT branch, company FROM employees WHERE employee_id = ?').get(employeeId);
   if (row?.company) company = row.company;
 
@@ -97,9 +282,7 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
   }
 
   if (row && row.branch !== branch) {
-    return res.status(409).json({
-      error: `هذا الموظف مسجل بالفعل في الفرع: ${row.branch}`
-    });
+    return res.status(409).json({ error: `هذا الموظف مسجل بالفعل في الفرع: ${row.branch}` });
   }
 
   const safeCompany = sanitize(company);
@@ -124,10 +307,8 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FACE SYNC API  (polled by each local site's face_sync.py)
+// FACE SYNC API  (polled by local site face_sync.py — public, by design)
 // ══════════════════════════════════════════════════════════════════════════════
-
-// GET /api/faces/manifest?branch=X
 app.get('/api/faces/manifest', (req, res) => {
   const branch = (req.query.branch || '').trim();
   if (!branch) return res.status(400).json({ error: 'branch مطلوب' });
@@ -152,7 +333,6 @@ app.get('/api/faces/manifest', (req, res) => {
   res.json(items);
 });
 
-// GET /api/faces/file/:company/:branch/:person/:filename
 app.get('/api/faces/file/:company/:branch/:person/:filename', (req, res) => {
   const { company, branch, person, filename } = req.params;
   const filePath = path.resolve(
@@ -162,10 +342,8 @@ app.get('/api/faces/file/:company/:branch/:person/:filename', (req, res) => {
     sanitize(person),
     sanitize(filename)
   );
-
   if (!filePath.startsWith(FACES + path.sep)) return res.status(400).end();
   if (!fs.existsSync(filePath)) return res.status(404).end();
-
   res.sendFile(filePath);
 });
 
@@ -190,7 +368,6 @@ app.get('/api/sites/:siteId/status', async (req, res) => {
   }
 });
 
-// ── Camera snapshot (latest frame) ───────────────────────────────────────────
 app.get('/api/sites/:siteId/snapshot/:camera', async (req, res) => {
   const site = findSite(req.params.siteId);
   if (!site) return res.status(404).end();
@@ -207,7 +384,6 @@ app.get('/api/sites/:siteId/snapshot/:camera', async (req, res) => {
   }
 });
 
-// ── Events list ───────────────────────────────────────────────────────────────
 app.get('/api/sites/:siteId/events', async (req, res) => {
   const site = findSite(req.params.siteId);
   if (!site) return res.status(404).json({ error: 'الموقع غير موجود' });
@@ -222,7 +398,6 @@ app.get('/api/sites/:siteId/events', async (req, res) => {
   }
 });
 
-// ── Event snapshot ────────────────────────────────────────────────────────────
 app.get('/api/sites/:siteId/events/:eventId/snapshot', async (req, res) => {
   const site = findSite(req.params.siteId);
   if (!site) return res.status(404).end();
@@ -238,7 +413,6 @@ app.get('/api/sites/:siteId/events/:eventId/snapshot', async (req, res) => {
   }
 });
 
-// ── Event clip (streamed, may be large) ──────────────────────────────────────
 app.get('/api/sites/:siteId/events/:eventId/clip', async (req, res) => {
   const site = findSite(req.params.siteId);
   if (!site) return res.status(404).end();
@@ -256,7 +430,7 @@ app.get('/api/sites/:siteId/events/:eventId/clip', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// EMPLOYEES
+// EMPLOYEES (Frappe-backed via session sid)
 // ══════════════════════════════════════════════════════════════════════════════
 app.get('/api/employees', (_req, res) => {
   const rows = db.prepare(
@@ -270,36 +444,30 @@ app.get('/api/companies', (_req, res) => {
   res.json(rows.map(r => r.name));
 });
 
-app.post('/api/employees/sync', async (_req, res) => {
-  if (!FRAPPE_API_KEY) {
-    return res.status(503).json({ error: 'FRAPPE_API_KEY غير مضبوط في متغيرات البيئة' });
-  }
+app.post('/api/employees/sync', async (req, res) => {
+  const sid = req.session?.sid;
+  if (!sid) return res.status(401).json({ error: 'يلزم تسجيل الدخول' });
 
-  const authHeader = FRAPPE_API_SECRET
-    ? `token ${FRAPPE_API_KEY}:${FRAPPE_API_SECRET}`
-    : `Bearer ${FRAPPE_API_KEY}`;
-
-  const url = new URL(`${FRAPPE_BASE}/api/resource/Employee`);
-  url.searchParams.set('fields',           JSON.stringify(['name', 'employee_name', 'branch', 'company']));
-  url.searchParams.set('limit_page_length', '500');
-  url.searchParams.set('limit',             '500');
-
-  let data;
+  // — Employees —
+  let empData;
   try {
-    const r = await fetch(url.toString(), {
-      headers: { Authorization: authHeader },
-      signal:  AbortSignal.timeout(20000)
-    });
+    const empPath = `/api/resource/Employee?fields=${
+      encodeURIComponent(JSON.stringify(['name', 'employee_name', 'branch', 'company']))
+    }&limit_page_length=0&limit=0`;
+    const r = await frappeFetch(sid, empPath);
+    if (r.status === 401 || r.status === 403) {
+      return res.status(401).json({ error: 'انتهت الجلسة — يرجى تسجيل الدخول مرة أخرى' });
+    }
     if (!r.ok) {
       const text = await r.text();
       return res.status(r.status).json({ error: `Frappe: ${r.status}`, detail: text.slice(0, 500) });
     }
-    data = await r.json();
+    empData = await r.json();
   } catch (e) {
     return res.status(503).json({ error: `تعذّر الاتصال بـ Frappe: ${e.message}` });
   }
 
-  const raw       = data.data || [];
+  const raw       = empData.data || [];
   const employees = raw.filter(e => e.name && e.company);
 
   const upsert = db.prepare(`
@@ -308,27 +476,24 @@ app.post('/api/employees/sync', async (_req, res) => {
   `);
 
   db.transaction(emps => {
+    db.prepare('DELETE FROM hr_employees').run();
     for (const e of emps) {
       upsert.run(e.name, e.employee_name || e.name, e.branch || '', e.company);
     }
   })(employees);
 
-  // Fetch companies from the Company doctype directly so all companies appear
-  // even if the API key can't see every employee
+  // — Companies —
   let companyCount = 0;
   try {
-    const compUrl = new URL(`${FRAPPE_BASE}/api/resource/Company`);
-    compUrl.searchParams.set('fields',           JSON.stringify(['name']));
-    compUrl.searchParams.set('limit_page_length', '100');
-    compUrl.searchParams.set('limit',             '100');
-    const cr = await fetch(compUrl.toString(), {
-      headers: { Authorization: authHeader },
-      signal:  AbortSignal.timeout(10000)
-    });
+    const compPath = `/api/resource/Company?fields=${
+      encodeURIComponent(JSON.stringify(['name']))
+    }&limit_page_length=0&limit=0`;
+    const cr = await frappeFetch(sid, compPath, {}, 10000);
     if (cr.ok) {
       const cd = await cr.json();
       const upsertCo = db.prepare('INSERT OR REPLACE INTO companies (name) VALUES (?)');
       db.transaction(cos => {
+        db.prepare('DELETE FROM companies').run();
         for (const c of cos) { if (c.name) { upsertCo.run(c.name); companyCount++; } }
       })(cd.data || []);
     }
@@ -336,17 +501,12 @@ app.post('/api/employees/sync', async (_req, res) => {
     console.warn('[sync] Could not fetch companies:', e.message);
   }
 
-  res.json({
-    success:   true,
-    saved:     employees.length,
-    companies: companyCount
-  });
+  res.json({ success: true, saved: employees.length, companies: companyCount });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SAVED FACES MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════════
-
 app.get('/api/saved-faces', (_req, res) => {
   const rows = db.prepare(`
     SELECT e.employee_id, h.employee_name, e.branch, e.company
@@ -382,7 +542,6 @@ app.delete('/api/saved-faces/:employeeId', (req, res) => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  // Remove empty parent dirs
   try {
     const branchDir  = path.join(FACES, sanitize(row.company), sanitize(row.branch));
     const companyDir = path.join(FACES, sanitize(row.company));
@@ -436,7 +595,18 @@ app.use((err, _req, res, _next) => {
 
 const server = app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
 
+// WebSocket upgrade auth: require session for /proxy/*
 server.on('upgrade', (req, socket, head) => {
   const handled = sites.some(site => req.url.startsWith(`/proxy/${site.id}`));
-  if (!handled) socket.destroy();
+  if (!handled) return socket.destroy();
+
+  // Parse cookies manually for upgrade requests
+  const raw = req.headers.cookie || '';
+  const match = raw.split(/;\s*/).map(c => c.split('=')).find(([k]) => k === SESSION_COOKIE);
+  const id = match?.[1];
+  const s  = id && sessions.get(id);
+  if (!s || s.expires < Date.now()) {
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    socket.destroy();
+  }
 });

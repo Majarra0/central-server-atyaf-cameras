@@ -10,7 +10,47 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="app">
+
+<!-- ═══ LOGIN SCREEN ════════════════════════════════════════════════════════ -->
+<div id="loginScreen" class="login-screen hidden">
+  <div class="login-card">
+    <div class="login-brand">
+      <svg width="44" height="44" viewBox="0 0 36 36" fill="none">
+        <path d="M18 2L3 8.5v10C3 27.3 9.8 33.5 18 34c8.2-.5 15-6.7 15-15.5v-10L18 2z"
+              stroke="#22d3ee" stroke-width="1.5" fill="rgba(34,211,238,0.07)"/>
+        <rect x="10" y="14" width="11" height="8" rx="1.5"
+              stroke="#22d3ee" stroke-width="1.2"/>
+        <path d="M21 16.5l4.5-2v7l-4.5-2" stroke="#22d3ee" stroke-width="1.2"
+              stroke-linejoin="round"/>
+        <circle cx="14.5" cy="18" r="1.5" fill="#22d3ee"/>
+      </svg>
+      <div>
+        <div class="login-title">نظام المراقبة المركزي</div>
+        <div class="login-sub">ATYAF SECURITY OPERATIONS</div>
+      </div>
+    </div>
+
+    <form id="loginForm" class="login-form" novalidate>
+      <label class="field-label" for="loginUser">اسم المستخدم</label>
+      <input type="text" id="loginUser" class="dark-input"
+             autocomplete="username" placeholder="user@example.com" required>
+
+      <label class="field-label" for="loginPass">كلمة المرور</label>
+      <input type="password" id="loginPass" class="dark-input"
+             autocomplete="current-password" placeholder="••••••••" required>
+
+      <button type="submit" id="loginBtn" class="submit-btn">
+        تسجيل الدخول
+      </button>
+
+      <div id="loginMsg" class="upload-msg hidden"></div>
+      <div class="login-hint">يتم استخدام نفس بيانات الدخول الخاصة بـ Frappe</div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══ APP ════════════════════════════════════════════════════════════════ -->
+<div id="app" class="app hidden">
 
   <!-- ═══ TOP BAR ═══════════════════════════════════════════════════════════ -->
   <header class="topbar">
@@ -36,6 +76,19 @@
       </div>
       <div class="divider-v"></div>
       <div class="clock" id="clock">--:--:--</div>
+      <div class="divider-v"></div>
+      <div class="user-chip" id="userChip">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="8" r="4"/><path d="M6 21a6 6 0 0112 0"/>
+        </svg>
+        <span id="userName">—</span>
+        <button class="logout-btn" id="logoutBtn" title="تسجيل الخروج">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 4H5a2 2 0 00-2 2v12a2 2 0 002 2h4M16 17l5-5-5-5M21 12H9"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -79,7 +132,7 @@
       </div>
 
       <div class="sidebar-footer">
-        <div class="sidebar-version">v1.0 · Frigate NVR</div>
+        <div class="sidebar-version">v1.1 · Frigate NVR</div>
       </div>
     </nav>
 
@@ -192,10 +245,15 @@
                 </select>
               </div>
               <div class="field">
-                <label class="field-label" for="employeeSelect">الموظف</label>
-                <select id="employeeSelect" class="dark-select full-width">
-                  <option value="" disabled selected>اختر الموظف...</option>
-                </select>
+                <label class="field-label">الموظف</label>
+                <div class="combobox" id="employeeCombo">
+                  <input type="text" id="employeeSearch"
+                         class="dark-input combobox-input"
+                         placeholder="ابحث بالاسم أو رقم الموظف..."
+                         autocomplete="off">
+                  <input type="hidden" id="employeeSelect" value="">
+                  <div class="combobox-panel hidden" id="employeePanel"></div>
+                </div>
               </div>
             </div>
 
@@ -263,13 +321,19 @@
             <h1 class="pane-title">الصور المحفوظة</h1>
             <p class="pane-sub">إدارة صور الوجوه وسجلات قاعدة البيانات</p>
           </div>
-          <button class="action-btn" id="refreshFacesBtn">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 4v5h5M20 20v-5h-5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M4.93 9A10 10 0 1119 19.07" stroke-linecap="round"/>
-            </svg>
-            تحديث
-          </button>
+          <div class="filter-row">
+            <input type="text" id="facesSearch" class="dark-input"
+                   style="max-width:260px"
+                   placeholder="ابحث بالاسم أو الفرع أو الشركة..."
+                   autocomplete="off">
+            <button class="action-btn" id="refreshFacesBtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4v5h5M20 20v-5h-5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4.93 9A10 10 0 1119 19.07" stroke-linecap="round"/>
+              </svg>
+              تحديث
+            </button>
+          </div>
         </div>
         <div id="facesStats" class="faces-stats"></div>
         <div id="facesList" class="faces-list">

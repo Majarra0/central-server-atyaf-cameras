@@ -1132,3 +1132,219 @@ input[type="file"] { display: none; }
 }
 
 .face-del-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   GLOBAL HIDDEN
+════════════════════════════════════════════════════════════════════════════ */
+.hidden { display: none !important; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LOGIN SCREEN
+════════════════════════════════════════════════════════════════════════════ */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(34,211,238,.08), transparent 60%),
+    radial-gradient(circle at 80% 80%, rgba(34,211,238,.06), transparent 60%),
+    var(--bg);
+  padding: 1.5rem;
+  z-index: 1000;
+  animation: fadeIn .25s ease;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem 1.75rem 1.75rem;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: .9rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.login-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.login-sub {
+  font-family: var(--mono);
+  font-size: .65rem;
+  color: var(--accent);
+  letter-spacing: .12em;
+  opacity: .75;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+}
+
+.login-form .field-label { margin-top: .35rem; }
+.login-form .submit-btn  { margin-top: .65rem; }
+
+.login-hint {
+  margin-top: .65rem;
+  font-size: .75rem;
+  color: var(--text-3);
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   USER CHIP IN TOPBAR
+════════════════════════════════════════════════════════════════════════════ */
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: .28rem .35rem .28rem .8rem;
+  color: var(--text-2);
+  font-size: .82rem;
+  max-width: 220px;
+}
+
+.user-chip > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.logout-btn:hover {
+  background: rgba(248,113,113,.15);
+  color: #f87171;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SEARCHABLE COMBOBOX
+════════════════════════════════════════════════════════════════════════════ */
+.combobox {
+  position: relative;
+}
+
+.combobox-input {
+  width: 100%;
+  padding-inline-end: 2.2rem;
+}
+
+.combobox::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  inset-inline-start: .85rem;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-3);
+  border-bottom: 2px solid var(--text-3);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+  transition: transform .15s, border-color .15s;
+}
+
+.combobox.open::after {
+  transform: translateY(-30%) rotate(-135deg);
+  border-color: var(--accent);
+}
+
+.combobox-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline: 0;
+  z-index: 50;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0,0,0,.5);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+}
+
+.combobox-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: .55rem .85rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background .12s;
+}
+
+.combobox-option:last-child { border-bottom: none; }
+
+.combobox-option:hover,
+.combobox-option.active {
+  background: var(--accent-dim);
+}
+
+.combobox-option-name {
+  font-size: .9rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.combobox-option-meta {
+  font-family: var(--mono);
+  font-size: .72rem;
+  color: var(--text-2);
+}
+
+.combobox-empty {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-3);
+  font-size: .85rem;
+}
+
+.combobox-selected-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  margin-top: .35rem;
+  padding: .15rem .55rem;
+  background: var(--accent-dim);
+  border: 1px solid rgba(34,211,238,.25);
+  border-radius: 4px;
+  font-size: .75rem;
+  font-family: var(--mono);
+  color: var(--accent);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   FACE ROW SEARCH FILTERING
+════════════════════════════════════════════════════════════════════════════ */
+.face-row.filter-hidden { display: none; }
