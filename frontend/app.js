@@ -1025,7 +1025,6 @@ function initFaceUploadModal() {
   const fileInput = document.getElementById('faceUploadPicture');
   const fileName  = document.getElementById('faceUploadFileName');
   const fileDrop  = document.getElementById('faceUploadDrop');
-  const preview   = document.getElementById('faceUploadPreview');
   const msgEl     = document.getElementById('faceUploadMsg');
 
   closeBtn?.addEventListener('click', closeFaceUploadModal);
@@ -1039,20 +1038,77 @@ function initFaceUploadModal() {
   });
 
   fileInput?.addEventListener('change', () => {
-    const file = fileInput.files[0];
-    if (!file) return;
-    fileName.textContent = file.name;
-    fileDrop.classList.add('active');
     hideMsg(msgEl);
-    const reader = new FileReader();
-    reader.onload = ev => {
-      preview.src = ev.target.result;
-      preview.classList.remove('hidden');
-    };
-    reader.readAsDataURL(file);
+    renderFaceUploadPreviews(fileInput.files);
+  });
+
+  fileDrop?.addEventListener('dragover', e => {
+    e.preventDefault();
+    fileDrop.classList.add('active');
+  });
+  fileDrop?.addEventListener('dragleave', e => {
+    if (!fileDrop.contains(e.relatedTarget)) fileDrop.classList.remove('active');
+  });
+  fileDrop?.addEventListener('drop', e => {
+    e.preventDefault();
+    if (!e.dataTransfer?.files?.length || !fileInput) return;
+    const dt = new DataTransfer();
+    [...e.dataTransfer.files].forEach(f => {
+      if (f.type.startsWith('image/')) dt.items.add(f);
+    });
+    if (!dt.files.length) return;
+    fileInput.files = dt.files;
+    hideMsg(msgEl);
+    renderFaceUploadPreviews(fileInput.files);
   });
 
   submitBtn?.addEventListener('click', () => submitFaceUploadModal());
+}
+
+function renderFaceUploadPreviews(fileList) {
+  const container = document.getElementById('faceUploadPreviews');
+  const fileName  = document.getElementById('faceUploadFileName');
+  const fileDrop  = document.getElementById('faceUploadDrop');
+  if (!container) return;
+
+  const files = [...fileList].filter(f => f.type.startsWith('image/'));
+  if (!files.length) {
+    container.innerHTML = '';
+    container.classList.add('hidden');
+    if (fileName) fileName.textContent = 'اسحب الصور هنا أو اضغط للاختيار';
+    fileDrop?.classList.remove('active');
+    return;
+  }
+
+  if (fileName) {
+    fileName.textContent = files.length === 1
+      ? files[0].name
+      : `تم اختيار ${files.length} صور`;
+  }
+  fileDrop?.classList.add('active');
+  container.classList.remove('hidden');
+  container.innerHTML = files.map((f, i) => `
+    <div class="face-upload-thumb" data-idx="${i}">
+      <img alt="">
+      <span class="face-upload-thumb-name">${esc(f.name)}</span>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.face-upload-thumb').forEach((el, i) => {
+    const reader = new FileReader();
+    reader.onload = ev => { el.querySelector('img').src = ev.target.result; };
+    reader.readAsDataURL(files[i]);
+  });
+}
+
+function clearFaceUploadSelection() {
+  const fileInput = document.getElementById('faceUploadPicture');
+  const fileName  = document.getElementById('faceUploadFileName');
+  const fileDrop  = document.getElementById('faceUploadDrop');
+  if (fileInput) fileInput.value = '';
+  if (fileName) fileName.textContent = 'اسحب الصور هنا أو اضغط للاختيار';
+  fileDrop?.classList.remove('active');
+  renderFaceUploadPreviews([]);
 }
 
 function openFaceUploadModal(emp) {
@@ -1069,12 +1125,11 @@ function openFaceUploadModal(emp) {
   const fileInput = document.getElementById('faceUploadPicture');
   const fileName  = document.getElementById('faceUploadFileName');
   const fileDrop  = document.getElementById('faceUploadDrop');
-  const preview   = document.getElementById('faceUploadPreview');
   const msgEl     = document.getElementById('faceUploadMsg');
   const submitBtn = document.getElementById('faceUploadSubmit');
 
   const label = emp.employee_name || emp.employee_id;
-  title.textContent = `إضافة صورة — ${label}`;
+  title.textContent = `إضافة صور — ${label}`;
   info.innerHTML = `
     <div class="face-upload-emp-name">${esc(label)}</div>
     <div class="face-upload-emp-meta">
@@ -1083,11 +1138,7 @@ function openFaceUploadModal(emp) {
       <span class="face-tag">${esc(emp.branch)}</span>
     </div>`;
 
-  fileInput.value = '';
-  fileName.textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
-  fileDrop.classList.remove('active');
-  preview.classList.add('hidden');
-  preview.src = '';
+  clearFaceUploadSelection();
   hideMsg(msgEl);
   submitBtn.disabled = false;
 
@@ -1099,6 +1150,19 @@ function closeFaceUploadModal() {
   _faceUploadTarget = null;
 }
 
+async function uploadOneFacePicture(emp, file) {
+  const fd = new FormData();
+  fd.append('employee_id', emp.employee_id);
+  fd.append('branch',      emp.branch);
+  fd.append('company',     emp.company);
+  fd.append('picture',     file);
+
+  const res = await fetch('/api/upload', { method: 'POST', body: fd });
+  if (res.status === 401) { showLogin(); return { auth: true }; }
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, error: data.error };
+}
+
 async function submitFaceUploadModal() {
   const emp = _faceUploadTarget;
   if (!emp) return;
@@ -1106,41 +1170,43 @@ async function submitFaceUploadModal() {
   const fileInput = document.getElementById('faceUploadPicture');
   const msgEl     = document.getElementById('faceUploadMsg');
   const submitBtn = document.getElementById('faceUploadSubmit');
-  const file      = fileInput?.files[0];
+  const files     = [...(fileInput?.files || [])].filter(f => f.type.startsWith('image/'));
 
   hideMsg(msgEl);
-  if (!file) return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
+  if (!files.length) return showMsg(msgEl, 'error', 'يرجى اختيار صورة واحدة على الأقل');
 
   submitBtn.disabled = true;
-  const fd = new FormData();
-  fd.append('employee_id', emp.employee_id);
-  fd.append('branch',      emp.branch);
-  fd.append('company',     emp.company);
-  fd.append('picture',     file);
+  const defaultLabel = submitBtn.innerHTML;
+  let ok = 0;
+  const failed = [];
 
   try {
-    const res = await fetch('/api/upload', { method: 'POST', body: fd });
-    if (res.status === 401) { showLogin(); return; }
-    const data = await res.json();
+    for (let i = 0; i < files.length; i++) {
+      submitBtn.innerHTML = `جارٍ الرفع... ${i + 1} / ${files.length}`;
+      const result = await uploadOneFacePicture(emp, files[i]);
+      if (result?.auth) return;
+      if (result.ok) ok++;
+      else failed.push({ name: files[i].name, error: result.error || 'فشل الرفع' });
+    }
 
-    if (res.ok) {
-      showMsg(msgEl, 'success', data.message || 'تم رفع الصورة بنجاح');
-      fileInput.value = '';
-      document.getElementById('faceUploadFileName').textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
-      document.getElementById('faceUploadDrop').classList.remove('active');
-      const preview = document.getElementById('faceUploadPreview');
-      preview.classList.add('hidden');
-      preview.src = '';
+    if (ok === files.length) {
+      showMsg(msgEl, 'success', ok === 1 ? 'تم رفع الصورة بنجاح' : `تم رفع ${ok} صور بنجاح`);
+      clearFaceUploadSelection();
       await refreshFaceRow(emp.employee_id);
       const hr = findEmployee(emp.employee_id);
       if (hr && !hr.registered_branch) hr.registered_branch = emp.branch;
+    } else if (ok > 0) {
+      showMsg(msgEl, 'error',
+        `تم رفع ${ok} من ${files.length}. فشل: ${failed.map(f => f.name).join('، ')}`);
+      await refreshFaceRow(emp.employee_id);
     } else {
-      showMsg(msgEl, 'error', data.error || 'حدث خطأ غير متوقع');
+      showMsg(msgEl, 'error', failed[0]?.error || 'فشل رفع الصور');
     }
   } catch {
     showMsg(msgEl, 'error', 'تعذّر الاتصال بالخادم');
   } finally {
     submitBtn.disabled = false;
+    submitBtn.innerHTML = defaultLabel;
   }
 }
 

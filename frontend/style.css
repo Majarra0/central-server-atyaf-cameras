@@ -1011,6 +1011,40 @@ input[type="file"] { display: none; }
   gap: .35rem;
 }
 
+.face-upload-previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: .5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.face-upload-previews.hidden { display: none; }
+
+.face-upload-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  min-width: 0;
+}
+
+.face-upload-thumb img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.face-upload-thumb-name {
+  font-size: .65rem;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 #streamFrame {
   width: 100%;
   height: min(62vh, 560px);

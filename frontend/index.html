@@ -370,7 +370,7 @@
 <div id="faceUploadModal" class="modal-overlay hidden">
   <div class="modal-box face-upload-box">
     <div class="modal-header">
-      <span id="faceUploadTitle" class="modal-title-text">إضافة صورة</span>
+      <span id="faceUploadTitle" class="modal-title-text">إضافة صور</span>
       <button type="button" class="modal-x" id="closeFaceUploadModal" aria-label="إغلاق">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/>
@@ -383,18 +383,18 @@
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
           <path d="M4 16l4-4 4 4 4-6 4 6M4 20h16M12 4v8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <span id="faceUploadFileName">اسحب الصورة هنا أو اضغط للاختيار</span>
-        <span class="file-hint">PNG · JPG · WEBP — حتى 10 MB</span>
+        <span id="faceUploadFileName">اسحب الصور هنا أو اضغط للاختيار</span>
+        <span class="file-hint">PNG · JPG · WEBP — حتى 10 MB لكل صورة · عدة صور</span>
       </label>
-      <input type="file" id="faceUploadPicture" accept="image/*">
-      <img id="faceUploadPreview" class="file-preview hidden" alt="معاينة">
+      <input type="file" id="faceUploadPicture" accept="image/*" multiple>
+      <div id="faceUploadPreviews" class="face-upload-previews hidden"></div>
       <div id="faceUploadMsg" class="upload-msg hidden"></div>
       <button type="button" id="faceUploadSubmit" class="submit-btn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"
                 stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        رفع الصورة
+        رفع الصور
       </button>
     </div>
   </div>
