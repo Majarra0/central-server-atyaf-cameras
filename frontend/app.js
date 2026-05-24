@@ -1068,65 +1068,137 @@ function renderFacesStats(data) {
 
 function applyFacesFilter() {
   const q = document.getElementById('facesSearch').value.trim().toLowerCase();
-  const rows = document.querySelectorAll('.face-row');
-  rows.forEach(r => {
+  document.querySelectorAll('.face-row').forEach(r => {
     const hay = (r.dataset.search || '').toLowerCase();
     r.classList.toggle('filter-hidden', q && !hay.includes(q));
   });
 }
 
+function facePhotoUrl(emp, filename) {
+  return `/api/faces/file/${encodeURIComponent(emp.company)}/${encodeURIComponent(emp.branch)}/${encodeURIComponent(emp.employee_id)}/${encodeURIComponent(filename)}`;
+}
+
+const FACE_DEL_ICON = `
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="3 6 5 6 21 6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+
 function buildFaceRow(emp) {
-  const thumbUrl = emp.firstPhoto
-    ? `/api/faces/file/${encodeURIComponent(emp.company)}/${encodeURIComponent(emp.branch)}/${encodeURIComponent(emp.employee_id)}/${encodeURIComponent(emp.firstPhoto)}`
-    : null;
+  const photos = Array.isArray(emp.photos) && emp.photos.length
+    ? emp.photos
+    : (emp.firstPhoto ? [emp.firstPhoto] : []);
 
   const row = document.createElement('div');
   row.className = 'face-row';
   row.dataset.id = emp.employee_id;
-  row.dataset.search = [emp.employee_id, emp.employee_name, emp.branch, emp.company].filter(Boolean).join(' ');
+  row.dataset.search = [
+    emp.employee_id, emp.employee_name, emp.branch, emp.company, ...photos
+  ].filter(Boolean).join(' ');
+
+  const photoCards = photos.length
+    ? photos.map(file => `
+        <div class="face-photo-card" data-file="${escAttr(file)}">
+          <img class="face-photo-img" src="${facePhotoUrl(emp, file)}" alt="" loading="lazy">
+          <button type="button" class="face-photo-del" title="حذف هذه الصورة">${FACE_DEL_ICON}</button>
+        </div>`).join('')
+    : `<div class="face-photos-empty">لا توجد ملفات صور</div>`;
 
   row.innerHTML = `
-    <div class="face-thumb-wrap">
-      ${thumbUrl
-        ? `<img class="face-thumb" src="${thumbUrl}" alt=""
-               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
-        : ''}
-      <div class="face-thumb-empty" style="display:${thumbUrl ? 'none' : 'flex'}">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
-          <circle cx="12" cy="8" r="4"/><path d="M6 20a6 6 0 0112 0"/>
-        </svg>
+    <div class="face-row-header">
+      <div class="face-info">
+        <div class="face-id">${esc(emp.employee_id)}</div>
+        ${emp.employee_name ? `<div class="face-name">${esc(emp.employee_name)}</div>` : ''}
       </div>
+      <div class="face-meta">
+        <span class="face-tag">${esc(emp.company)}</span>
+        <span class="face-tag">${esc(emp.branch)}</span>
+      </div>
+      <div class="face-count">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+        </svg>
+        <span class="face-count-num">${photos.length}</span> صورة
+      </div>
+      <button type="button" class="face-del-all-btn" title="حذف الموظف وجميع صوره">
+        ${FACE_DEL_ICON}
+        <span>حذف الكل</span>
+      </button>
     </div>
-    <div class="face-info">
-      <div class="face-id">${esc(emp.employee_id)}</div>
-      ${emp.employee_name ? `<div class="face-name">${esc(emp.employee_name)}</div>` : ''}
-    </div>
-    <div class="face-meta">
-      <span class="face-tag">${esc(emp.company)}</span>
-      <span class="face-tag">${esc(emp.branch)}</span>
-    </div>
-    <div class="face-count">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
-      </svg>
-      ${emp.photoCount} صورة
-    </div>
-    <button class="face-del-btn" title="حذف">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="3 6 5 6 21 6" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>`;
+    <div class="face-photos-grid">${photoCards}</div>`;
 
-  row.querySelector('.face-del-btn').addEventListener('click', () => deleteFace(emp, row));
+  row.querySelector('.face-del-all-btn').addEventListener('click', () => deleteAllFaces(emp, row));
+
+  row.querySelectorAll('.face-photo-del').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const card = btn.closest('.face-photo-card');
+      deleteSinglePhoto(emp, card.dataset.file, card, row);
+    });
+  });
+
   return row;
 }
 
-async function deleteFace(emp, row) {
-  if (!confirm(`حذف ${emp.employee_id} وجميع صوره؟`)) return;
-  const btn = row.querySelector('.face-del-btn');
+async function deleteSinglePhoto(emp, filename, cardEl, rowEl) {
+  if (!confirm(`حذف هذه الصورة؟\n${filename}`)) return;
+  const btn = cardEl.querySelector('.face-photo-del');
+  btn.disabled = true;
+  try {
+    const r = await fetch(
+      `/api/saved-faces/${encodeURIComponent(emp.employee_id)}/photos/${encodeURIComponent(filename)}`,
+      { method: 'DELETE' }
+    );
+    if (r.status === 401) { showLogin(); return; }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      alert(data.error || 'فشل حذف الصورة');
+      btn.disabled = false;
+      return;
+    }
+
+    if (data.employeeRemoved) {
+      rowEl.style.transition = 'opacity .25s';
+      rowEl.style.opacity    = '0';
+      setTimeout(() => {
+        rowEl.remove();
+        _facesRows = _facesRows.filter(e => e.employee_id !== emp.employee_id);
+        refreshFacesStatsFromDom();
+      }, 260);
+      return;
+    }
+
+    cardEl.style.transition = 'opacity .2s, transform .2s';
+    cardEl.style.opacity    = '0';
+    cardEl.style.transform  = 'scale(.92)';
+    setTimeout(() => {
+      cardEl.remove();
+      const countEl = rowEl.querySelector('.face-count-num');
+      const left    = rowEl.querySelectorAll('.face-photo-card').length;
+      if (countEl) countEl.textContent = left;
+      const rec = _facesRows.find(e => e.employee_id === emp.employee_id);
+      if (rec) {
+        rec.photos     = data.photos || [];
+        rec.photoCount = rec.photos.length;
+        rec.firstPhoto = rec.photos[0] || null;
+      }
+      if (!rowEl.querySelector('.face-photo-card')) {
+        rowEl.querySelector('.face-photos-grid').innerHTML =
+          '<div class="face-photos-empty">لا توجد ملفات صور</div>';
+      }
+      refreshFacesStatsFromDom();
+    }, 200);
+  } catch {
+    alert('تعذّر الاتصال بالخادم');
+    btn.disabled = false;
+  }
+}
+
+async function deleteAllFaces(emp, row) {
+  if (!confirm(`حذف ${emp.employee_id} وجميع صوره (${emp.photoCount || '?'} صورة)؟`)) return;
+  const btn = row.querySelector('.face-del-all-btn');
   btn.disabled = true;
   try {
     const r = await fetch(`/api/saved-faces/${encodeURIComponent(emp.employee_id)}`, { method: 'DELETE' });
@@ -1136,7 +1208,8 @@ async function deleteFace(emp, row) {
       row.style.opacity    = '0';
       setTimeout(() => {
         row.remove();
-        updateFacesStatsAfterDelete();
+        _facesRows = _facesRows.filter(e => e.employee_id !== emp.employee_id);
+        refreshFacesStatsFromDom();
       }, 260);
     } else {
       const d = await r.json();
@@ -1149,11 +1222,16 @@ async function deleteFace(emp, row) {
   }
 }
 
-function updateFacesStatsAfterDelete() {
-  const rows  = document.querySelectorAll('.face-row');
-  if (!rows.length) {
-    document.getElementById('facesStats').innerHTML = '';
-    document.getElementById('facesList').innerHTML = `
+function refreshFacesStatsFromDom() {
+  const rows       = document.querySelectorAll('.face-row');
+  const empCount   = rows.length;
+  const photoCount = document.querySelectorAll('.face-photo-card').length;
+  const stats      = document.getElementById('facesStats');
+  const list       = document.getElementById('facesList');
+
+  if (!empCount) {
+    stats.innerHTML = '';
+    list.innerHTML  = `
       <div class="empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
           <circle cx="12" cy="8" r="4"/><path d="M6 20a6 6 0 0112 0"/>
@@ -1162,17 +1240,11 @@ function updateFacesStatsAfterDelete() {
       </div>`;
     return;
   }
-  const empCount = rows.length;
-  const photoCount = Array.from(rows).reduce((s, r) => {
-    const txt = r.querySelector('.face-count')?.textContent || '';
-    return s + (parseInt(txt) || 0);
-  }, 0);
-  const stats = document.getElementById('facesStats');
-  const bar = stats.querySelector('.faces-stat-bar');
-  if (bar) {
-    bar.innerHTML = `
+
+  stats.innerHTML = `
+    <div class="faces-stat-bar">
       <span class="faces-stat"><strong>${empCount}</strong> موظف مسجل</span>
       <span class="faces-stat-sep">·</span>
-      <span class="faces-stat"><strong>${photoCount}</strong> صورة إجمالاً</span>`;
-  }
+      <span class="faces-stat"><strong>${photoCount}</strong> صورة إجمالاً</span>
+    </div>`;
 }

@@ -1030,9 +1030,9 @@ input[type="file"] { display: none; }
 
 .face-row {
   display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: .65rem 1rem;
+  flex-direction: column;
+  gap: .75rem;
+  padding: .85rem 1rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1041,29 +1041,11 @@ input[type="file"] { display: none; }
 
 .face-row:hover { border-color: var(--border-2); }
 
-.face-thumb-wrap {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--surface-3);
-}
-
-.face-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.face-thumb-empty {
-  width: 100%;
-  height: 100%;
+.face-row-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: var(--text-3);
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .face-info {
@@ -1117,28 +1099,89 @@ input[type="file"] { display: none; }
   min-width: 60px;
 }
 
-.face-del-btn {
+.face-del-all-btn {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .35rem .65rem;
+  background: transparent;
+  border: 1px solid rgba(248,113,113,.35);
+  border-radius: var(--radius);
+  color: #f87171;
+  font-family: 'Tajawal', sans-serif;
+  font-size: .78rem;
+  cursor: pointer;
+  transition: all .15s;
+  margin-inline-start: auto;
+}
+
+.face-del-all-btn:hover {
+  background: rgba(248,113,113,.12);
+  border-color: #f87171;
+}
+
+.face-del-all-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.face-photos-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  padding-top: .15rem;
+  border-top: 1px solid var(--border);
+}
+
+.face-photos-empty {
+  font-size: .82rem;
+  color: var(--text-3);
+  padding: .5rem 0;
+}
+
+.face-photo-card {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.face-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.face-photo-del {
+  position: absolute;
+  top: 4px;
+  inset-inline-start: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  color: var(--text-3);
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: rgba(6, 11, 20, .75);
+  border: 1px solid rgba(248,113,113,.45);
+  border-radius: 4px;
+  color: #fca5a5;
   cursor: pointer;
-  transition: all .15s;
+  opacity: 0;
+  transition: opacity .15s, background .15s;
 }
 
-.face-del-btn:hover {
-  background: rgba(248,113,113,.12);
-  border-color: rgba(248,113,113,.4);
+.face-photo-card:hover .face-photo-del { opacity: 1; }
+
+.face-photo-del:hover {
+  background: rgba(248,113,113,.25);
   color: #f87171;
 }
 
-.face-del-btn:disabled { opacity: .4; cursor: not-allowed; }
+.face-photo-del:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    GLOBAL HIDDEN
