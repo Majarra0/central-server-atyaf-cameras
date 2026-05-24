@@ -9,8 +9,11 @@ const crypto       = require('crypto');
 const { Readable } = require('stream');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const db           = require('./db');
+const PKG          = require('./package.json');
 
 const FRAPPE_BASE = (process.env.FRAPPE_BASE_URL || 'https://dr-atyaf.e2next.com').replace(/\/$/, '');
+const FRONTEND_DIR  = path.join(__dirname, '../frontend');
+const ASSET_VER     = process.env.DASHBOARD_VERSION || PKG.version || '1';
 
 const app   = express();
 const PORT  = parseInt(process.env.PORT, 10) || 3000;
@@ -210,8 +213,29 @@ function authGate(req, res, next) {
 
 app.use(authGate);
 
-// Static frontend (login.html + index.html + assets)
-app.use(express.static(path.join(__dirname, '../frontend')));
+// index.html with cache-busting query on JS/CSS (avoids stale UI after git pull)
+app.get(['/', '/index.html'], (_req, res) => {
+  try {
+    let html = fs.readFileSync(path.join(FRONTEND_DIR, 'index.html'), 'utf8');
+    html = html
+      .replace('href="style.css"', `href="style.css?v=${ASSET_VER}"`)
+      .replace('src="app.js"', `src="app.js?v=${ASSET_VER}"`);
+    res.set('Cache-Control', 'no-store');
+    res.type('html').send(html);
+  } catch {
+    res.status(500).send('index.html missing');
+  }
+});
+
+// Static frontend assets (no long cache — restart/git pull should show immediately)
+app.use(express.static(FRONTEND_DIR, {
+  etag: false,
+  setHeaders(res, filePath) {
+    if (/\.(html|js|css)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+}));
 
 // ── Per-site transparent proxy (HTTP + WebSocket) — auth-gated by authGate ──
 sites.forEach(site => {
@@ -303,7 +327,7 @@ app.get('/api/me', (req, res) => {
   res.json({ authenticated: true, user: s.user, fullName: s.fullName });
 });
 
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, version: ASSET_VER }));
 
 // ══════════════════════════════════════════════════════════════════════════════
 // HELPERS
