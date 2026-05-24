@@ -285,7 +285,6 @@ function refreshUploadDropdowns() {
 
   // Refresh combobox list, restore selected employee if still present
   refreshEmployeeCombo(company, branch, saved.employee_id);
-  renderEmployeeQuickList();
 }
 
 function populateCompanyDropdown() {
@@ -355,7 +354,6 @@ function refreshEmployeeCombo(company, branch, preselectId) {
       input.value  = formatEmployeeLabel(pre);
       applyBranchLock(pre.registered_branch);
       renderComboPanel(filtered, pre.employee_id);
-      renderEmployeeQuickList();
       return;
     }
   }
@@ -364,7 +362,6 @@ function refreshEmployeeCombo(company, branch, preselectId) {
   input.value  = '';
   applyBranchLock(null);
   renderComboPanel(filtered, null);
-  renderEmployeeQuickList();
 }
 
 function formatEmployeeLabel(e) {
@@ -399,7 +396,6 @@ function renderComboPanel(list, selectedId) {
         branch:      employeeRegisteredBranch(emp) || document.getElementById('branch').value
       });
       closeCombo();
-      renderEmployeeQuickList();
     });
   });
 }
@@ -414,61 +410,9 @@ function closeCombo() {
   document.getElementById('employeePanel').classList.add('hidden');
 }
 
-function renderEmployeeQuickList() {
-  const listEl   = document.getElementById('employeeQuickList');
-  const searchEl = document.getElementById('employeeListSearch');
-  if (!listEl) return;
-
-  const company = document.getElementById('company')?.value || '';
-  const branch  = document.getElementById('branch')?.value  || '';
-  const q         = (searchEl?.value || '').trim().toLowerCase();
-  const selectedId = document.getElementById('employeeSelect')?.value || '';
-
-  if (!company) {
-    listEl.innerHTML = '<div class="employee-quick-empty">اختر الشركة لعرض الموظفين</div>';
-    return;
-  }
-  if (!branch) {
-    listEl.innerHTML = '<div class="employee-quick-empty">اختر الفرع لعرض الموظفين</div>';
-    return;
-  }
-
-  let list = employees
-    .filter(e => e.company === company && employeeMatchesBranchFilter(e, branch))
-    .sort((a, b) => (a.employee_name || '').localeCompare(b.employee_name || '', 'ar'));
-
-  if (q) {
-    list = list.filter(e =>
-      (e.employee_name || '').toLowerCase().includes(q) ||
-      e.employee_id.toLowerCase().includes(q)
-    );
-  }
-
-  if (!list.length) {
-    listEl.innerHTML = '<div class="employee-quick-empty">لا يوجد موظفون مطابقون</div>';
-    return;
-  }
-
-  listEl.innerHTML = list.map(e => `
-    <div class="employee-quick-row${e.employee_id === selectedId ? ' selected' : ''}">
-      <div class="employee-quick-main">
-        <div class="employee-quick-name">${esc(e.employee_name || e.employee_id)}</div>
-        <div class="employee-quick-meta">${esc(e.employee_id)}${employeeRegisteredBranch(e) ? ' · مسجل' : ''}</div>
-      </div>
-      <button type="button" class="employee-quick-add" data-id="${escAttr(e.employee_id)}">إضافة صورة</button>
-    </div>
-  `).join('');
-
-  listEl.querySelectorAll('.employee-quick-add').forEach(btn => {
-    btn.addEventListener('click', ev => {
-      ev.stopPropagation();
-      const emp = findEmployee(btn.dataset.id);
-      if (emp) selectEmployeeForUpload(emp);
-    });
-  });
-}
-
 function selectEmployeeForUpload(emp) {
+  switchTab('upload');
+
   const companyEl = document.getElementById('company');
   const branchEl  = document.getElementById('branch');
 
@@ -487,11 +431,20 @@ function selectEmployeeForUpload(emp) {
   if (emp.company) ensureOption(companyEl, emp.company);
   populateBranchDropdown(emp.company);
 
-  const branch = employeeRegisteredBranch(emp) || employeeHrBranch(emp);
+  const branch = employeeRegisteredBranch(emp) || emp.branch || employeeHrBranch(emp);
   if (branch) ensureOption(branchEl, branch);
 
   refreshEmployeeCombo(emp.company, branchEl.value, emp.employee_id);
-  renderEmployeeQuickList();
+
+  const hidden = document.getElementById('employeeSelect');
+  const input  = document.getElementById('employeeSearch');
+  if (hidden && !hidden.value) {
+    hidden.value = emp.employee_id;
+    input.value  = emp.employee_name
+      ? `${emp.employee_name} (${emp.employee_id})`
+      : emp.employee_id;
+    applyBranchLock(branch);
+  }
 
   saveFormState({
     company:     emp.company,
@@ -613,14 +566,11 @@ function initUploadTab() {
   populateCompanyDropdown();
   bindEmployeeCombo();
 
-  document.getElementById('employeeListSearch')?.addEventListener('input', renderEmployeeQuickList);
-
   document.getElementById('company').addEventListener('change', function () {
     applyBranchLock(null);
     saveFormState({ company: this.value, branch: '', employee_id: '' });
     populateBranchDropdown(this.value);
     refreshEmployeeCombo(this.value, '', null);
-    renderEmployeeQuickList();
   });
 
   document.getElementById('branch').addEventListener('change', function () {
@@ -636,7 +586,6 @@ function initUploadTab() {
     }
     saveFormState({ branch: this.value, employee_id: '' });
     refreshEmployeeCombo(company, this.value, null);
-    renderEmployeeQuickList();
   });
 
   document.getElementById('syncEmployeesBtn').addEventListener('click', () => runSync({ silent: false }));
@@ -739,7 +688,6 @@ function initUploadTab() {
         if (empRecord) empRecord.registered_branch = branch;
         applyBranchLock(branch);
         saveFormState({ company, branch, employee_id: employeeId });
-        renderEmployeeQuickList();
         // Reset only the photo selection; keep company/branch/employee for batch uploads
         fileInput.value      = '';
         fileName.textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
@@ -1224,12 +1172,31 @@ function buildFaceRow(emp) {
         </svg>
         <span class="face-count-num">${photos.length}</span> صورة
       </div>
-      <button type="button" class="face-del-all-btn" title="حذف الموظف وجميع صوره">
-        ${FACE_DEL_ICON}
-        <span>حذف الكل</span>
-      </button>
+      <div class="face-row-actions">
+        <button type="button" class="face-add-btn" title="إضافة صورة لهذا الموظف">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14" stroke-linecap="round"/>
+          </svg>
+          <span>إضافة صورة</span>
+        </button>
+        <button type="button" class="face-del-all-btn" title="حذف الموظف وجميع صوره">
+          ${FACE_DEL_ICON}
+          <span>حذف الكل</span>
+        </button>
+      </div>
     </div>
     <div class="face-photos-grid">${photoCards}</div>`;
+
+  row.querySelector('.face-add-btn').addEventListener('click', () => {
+    const hr = findEmployee(emp.employee_id) || {
+      employee_id:       emp.employee_id,
+      employee_name:       emp.employee_name,
+      company:             emp.company,
+      branch:              emp.branch,
+      registered_branch:   emp.branch
+    };
+    selectEmployeeForUpload(hr);
+  });
 
   row.querySelector('.face-del-all-btn').addEventListener('click', () => deleteAllFaces(emp, row));
 
