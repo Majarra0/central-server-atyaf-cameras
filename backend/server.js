@@ -364,7 +364,9 @@ app.post('/api/upload', upload.single('picture'), async (req, res) => {
   }
 
   if (row && row.branch !== branch) {
-    return res.status(409).json({ error: `هذا الموظف مسجل بالفعل في الفرع: ${row.branch}` });
+    return res.status(409).json({
+      error: `لا يمكن رفع صور لهذا الموظف في فرع آخر — مسجل في: ${row.branch}`
+    });
   }
 
   const safeCompany = sanitize(company);
@@ -521,9 +523,17 @@ app.get('/api/sites/:siteId/events/:eventId/clip', async (req, res) => {
 // EMPLOYEES (Frappe-backed via session sid)
 // ══════════════════════════════════════════════════════════════════════════════
 app.get('/api/employees', (_req, res) => {
-  const rows = db.prepare(
-    'SELECT employee_id, employee_name, branch, company FROM hr_employees ORDER BY employee_name'
-  ).all();
+  const rows = db.prepare(`
+    SELECT
+      h.employee_id,
+      h.employee_name,
+      h.branch,
+      h.company,
+      e.branch AS registered_branch
+    FROM hr_employees h
+    LEFT JOIN employees e ON e.employee_id = h.employee_id
+    ORDER BY h.employee_name
+  `).all();
   res.json(rows);
 });
 

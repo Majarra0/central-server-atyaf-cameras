@@ -355,6 +355,13 @@ body {
 
 .dark-input { width: 100%; padding: .6rem .85rem; }
 
+.dark-select:disabled,
+.dark-input:disabled {
+  opacity: .65;
+  cursor: not-allowed;
+  border-color: var(--border);
+}
+
 .full-width { width: 100%; }
 
 /* ── Empty / placeholder state ────────────────────────────────────────────── */

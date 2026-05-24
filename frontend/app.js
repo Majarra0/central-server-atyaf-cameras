@@ -220,7 +220,51 @@ async function loadCompanies() {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // UPLOAD DROPDOWNS
+// registered_branch = branch locked after first photo upload (employees table)
 // ══════════════════════════════════════════════════════════════════════════════
+function employeeRegisteredBranch(emp) {
+  return (emp?.registered_branch || '').trim();
+}
+
+function employeeHrBranch(emp) {
+  return (emp?.branch || '').trim();
+}
+
+/** Branch used for dropdown filtering — upload lock wins over HR branch */
+function employeeListBranch(emp) {
+  return employeeRegisteredBranch(emp) || employeeHrBranch(emp);
+}
+
+function employeeMatchesBranchFilter(emp, branch) {
+  if (!branch) return true;
+  const reg = employeeRegisteredBranch(emp);
+  if (reg) return reg === branch;
+  return employeeHrBranch(emp) === branch;
+}
+
+function findEmployee(id) {
+  return employees.find(e => e.employee_id === id);
+}
+
+function applyBranchLock(registeredBranch) {
+  const branchEl = document.getElementById('branch');
+  if (!branchEl) return;
+  const reg = (registeredBranch || '').trim();
+  if (reg) {
+    if (![...branchEl.options].some(o => o.value === reg)) {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = reg;
+      branchEl.appendChild(opt);
+    }
+    branchEl.value = reg;
+    branchEl.disabled = true;
+    branchEl.title = `الموظف مسجل في هذا الفرع — لا يمكن تغييره`;
+  } else {
+    branchEl.disabled = false;
+    branchEl.title = '';
+  }
+}
+
 function refreshUploadDropdowns() {
   const saved = loadFormState();
 
@@ -277,10 +321,11 @@ function populateBranchDropdown(company) {
   employees
     .filter(e => !company || e.company === company)
     .forEach(e => {
-      if (e.branch && !seen.has(e.branch)) {
-        seen.add(e.branch);
+      const b = employeeListBranch(e);
+      if (b && !seen.has(b)) {
+        seen.add(b);
         const opt = document.createElement('option');
-        opt.value = opt.textContent = e.branch;
+        opt.value = opt.textContent = b;
         sel.appendChild(opt);
       }
     });
@@ -292,7 +337,7 @@ function populateBranchDropdown(company) {
 // ══════════════════════════════════════════════════════════════════════════════
 function refreshEmployeeCombo(company, branch, preselectId) {
   const filtered = employees
-    .filter(e => (!company || e.company === company) && (!branch || e.branch === branch))
+    .filter(e => (!company || e.company === company) && employeeMatchesBranchFilter(e, branch))
     .sort((a, b) => (a.employee_name || '').localeCompare(b.employee_name || '', 'ar'));
 
   const combo  = document.getElementById('employeeCombo');
@@ -307,6 +352,7 @@ function refreshEmployeeCombo(company, branch, preselectId) {
     if (pre) {
       hidden.value = pre.employee_id;
       input.value  = formatEmployeeLabel(pre);
+      applyBranchLock(pre.registered_branch);
       renderComboPanel(filtered, pre.employee_id);
       return;
     }
@@ -314,6 +360,7 @@ function refreshEmployeeCombo(company, branch, preselectId) {
 
   hidden.value = '';
   input.value  = '';
+  applyBranchLock(null);
   renderComboPanel(filtered, null);
 }
 
@@ -331,7 +378,7 @@ function renderComboPanel(list, selectedId) {
     <div class="combobox-option${e.employee_id === selectedId ? ' active' : ''}"
          data-id="${escAttr(e.employee_id)}">
       <span class="combobox-option-name">${esc(e.employee_name || e.employee_id)}</span>
-      <span class="combobox-option-meta">${esc(e.employee_id)} · ${esc(e.branch || '')} · ${esc(e.company || '')}</span>
+      <span class="combobox-option-meta">${esc(e.employee_id)} · ${esc(employeeListBranch(e))}${employeeRegisteredBranch(e) ? ' (مسجل)' : ''} · ${esc(e.company || '')}</span>
     </div>
   `).join('');
 
@@ -343,7 +390,11 @@ function renderComboPanel(list, selectedId) {
       const hide = document.getElementById('employeeSelect');
       inp.value  = formatEmployeeLabel(emp);
       hide.value = emp.employee_id;
-      saveFormState({ employee_id: emp.employee_id });
+      applyBranchLock(emp.registered_branch);
+      saveFormState({
+        employee_id: emp.employee_id,
+        branch:      employeeRegisteredBranch(emp) || document.getElementById('branch').value
+      });
       closeCombo();
     });
   });
@@ -466,6 +517,7 @@ function initUploadTab() {
   bindEmployeeCombo();
 
   document.getElementById('company').addEventListener('change', function () {
+    applyBranchLock(null);
     saveFormState({ company: this.value, branch: '', employee_id: '' });
     populateBranchDropdown(this.value);
     refreshEmployeeCombo(this.value, '', null);
@@ -473,6 +525,15 @@ function initUploadTab() {
 
   document.getElementById('branch').addEventListener('change', function () {
     const company = document.getElementById('company').value;
+    const empId   = document.getElementById('employeeSelect').value;
+    const emp     = empId ? findEmployee(empId) : null;
+    const reg     = employeeRegisteredBranch(emp);
+    if (reg && this.value !== reg) {
+      showMsg(document.getElementById('uploadMsg'), 'error',
+        `هذا الموظف مسجل في الفرع: ${reg} — اختر ذلك الفرع أو موظفاً آخر`);
+      this.value = reg;
+      return;
+    }
     saveFormState({ branch: this.value, employee_id: '' });
     refreshEmployeeCombo(company, this.value, null);
   });
@@ -545,6 +606,12 @@ function initUploadTab() {
     if (!employeeId) return showMsg(msgEl, 'error', 'يرجى اختيار الموظف من القائمة');
     if (!file)       return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
 
+    const empRecord = findEmployee(employeeId);
+    const regBranch = employeeRegisteredBranch(empRecord);
+    if (regBranch && regBranch !== branch) {
+      return showMsg(msgEl, 'error', `لا يمكن رفع صور في فرع آخر — الموظف مسجل في: ${regBranch}`);
+    }
+
     submitBtn.disabled = true;
     submitBtn.innerHTML = `
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -568,6 +635,9 @@ function initUploadTab() {
 
       if (res.ok) {
         showMsg(msgEl, 'success', data.message);
+        if (empRecord) empRecord.registered_branch = branch;
+        applyBranchLock(branch);
+        saveFormState({ company, branch, employee_id: employeeId });
         // Reset only the photo selection; keep company/branch/employee for batch uploads
         fileInput.value      = '';
         fileName.textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
