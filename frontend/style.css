@@ -708,9 +708,9 @@ body {
 ════════════════════════════════════════════════════════════════════════════ */
 .upload-layout {
   display: grid;
-  grid-template-columns: 440px 1fr;
+  grid-template-columns: 440px minmax(280px, 1fr);
   gap: 1.5rem;
-  max-width: 900px;
+  max-width: 1100px;
 }
 
 @media (max-width: 800px) {
@@ -858,7 +858,109 @@ input[type="file"] { display: none; }
 .upload-msg.error   { background: rgba(239,68,68,.12);  color: #fca5a5; border: 1px solid rgba(239,68,68,.25); }
 
 /* Info card */
-.upload-info { padding-top: .25rem; }
+.upload-info {
+  padding-top: .25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.employee-list-card {
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+  min-height: 200px;
+}
+
+.employee-list-hint {
+  font-size: .8rem;
+  color: var(--text-2);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.employee-quick-list {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  max-height: min(52vh, 520px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+}
+
+.employee-quick-empty {
+  padding: 1.25rem .5rem;
+  text-align: center;
+  color: var(--text-3);
+  font-size: .85rem;
+}
+
+.employee-quick-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem .55rem;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color .15s, background .15s;
+}
+
+.employee-quick-row:hover { border-color: var(--border-2); }
+
+.employee-quick-row.selected {
+  border-color: rgba(34, 211, 238, .45);
+  background: var(--accent-dim);
+}
+
+.employee-quick-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.employee-quick-name {
+  font-size: .88rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.employee-quick-meta {
+  font-family: var(--mono);
+  font-size: .7rem;
+  color: var(--text-2);
+  margin-top: .12rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.employee-quick-add {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .35rem .55rem;
+  background: var(--accent-dim);
+  border: 1px solid rgba(34, 211, 238, .35);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-family: 'Tajawal', sans-serif;
+  font-size: .75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+
+.employee-quick-add:hover {
+  background: rgba(34, 211, 238, .2);
+  border-color: var(--accent);
+}
 
 .info-card {
   background: var(--surface);
