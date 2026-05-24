@@ -410,56 +410,6 @@ function closeCombo() {
   document.getElementById('employeePanel').classList.add('hidden');
 }
 
-function selectEmployeeForUpload(emp) {
-  switchTab('upload');
-
-  const companyEl = document.getElementById('company');
-  const branchEl  = document.getElementById('branch');
-
-  function ensureOption(sel, value) {
-    if (!value || !sel) return;
-    if ([...sel.options].some(o => o.value === value)) {
-      sel.value = value;
-    } else {
-      const opt = document.createElement('option');
-      opt.value = opt.textContent = value;
-      sel.appendChild(opt);
-      sel.value = value;
-    }
-  }
-
-  if (emp.company) ensureOption(companyEl, emp.company);
-  populateBranchDropdown(emp.company);
-
-  const branch = employeeRegisteredBranch(emp) || emp.branch || employeeHrBranch(emp);
-  if (branch) ensureOption(branchEl, branch);
-
-  refreshEmployeeCombo(emp.company, branchEl.value, emp.employee_id);
-
-  const hidden = document.getElementById('employeeSelect');
-  const input  = document.getElementById('employeeSearch');
-  if (hidden && !hidden.value) {
-    hidden.value = emp.employee_id;
-    input.value  = emp.employee_name
-      ? `${emp.employee_name} (${emp.employee_id})`
-      : emp.employee_id;
-    applyBranchLock(branch);
-  }
-
-  saveFormState({
-    company:     emp.company,
-    branch:      branchEl.value,
-    employee_id: emp.employee_id
-  });
-
-  const msgEl = document.getElementById('uploadMsg');
-  showMsg(msgEl, 'success', `تم اختيار ${emp.employee_name || emp.employee_id} — اختر الصورة ثم اضغط رفع`);
-
-  const fileDrop = document.getElementById('fileDrop');
-  fileDrop?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  fileDrop?.classList.add('active');
-}
-
 function bindEmployeeCombo() {
   const combo = document.getElementById('employeeCombo');
   const input = document.getElementById('employeeSearch');
@@ -1062,9 +1012,158 @@ function hideMsg(el) {
 function initFacesTab() {
   document.getElementById('refreshFacesBtn').addEventListener('click', loadFacesList);
   document.getElementById('facesSearch').addEventListener('input', applyFacesFilter);
+  initFaceUploadModal();
 }
 
 let _facesRows = [];
+let _faceUploadTarget = null;
+
+function initFaceUploadModal() {
+  const modal     = document.getElementById('faceUploadModal');
+  const closeBtn  = document.getElementById('closeFaceUploadModal');
+  const submitBtn = document.getElementById('faceUploadSubmit');
+  const fileInput = document.getElementById('faceUploadPicture');
+  const fileName  = document.getElementById('faceUploadFileName');
+  const fileDrop  = document.getElementById('faceUploadDrop');
+  const preview   = document.getElementById('faceUploadPreview');
+  const msgEl     = document.getElementById('faceUploadMsg');
+
+  closeBtn?.addEventListener('click', closeFaceUploadModal);
+  modal?.addEventListener('click', e => {
+    if (e.target === modal) closeFaceUploadModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+      closeFaceUploadModal();
+    }
+  });
+
+  fileInput?.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    fileName.textContent = file.name;
+    fileDrop.classList.add('active');
+    hideMsg(msgEl);
+    const reader = new FileReader();
+    reader.onload = ev => {
+      preview.src = ev.target.result;
+      preview.classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+  });
+
+  submitBtn?.addEventListener('click', () => submitFaceUploadModal());
+}
+
+function openFaceUploadModal(emp) {
+  _faceUploadTarget = {
+    employee_id: emp.employee_id,
+    employee_name: emp.employee_name || '',
+    company: emp.company,
+    branch: emp.branch
+  };
+
+  const modal = document.getElementById('faceUploadModal');
+  const info  = document.getElementById('faceUploadEmpInfo');
+  const title = document.getElementById('faceUploadTitle');
+  const fileInput = document.getElementById('faceUploadPicture');
+  const fileName  = document.getElementById('faceUploadFileName');
+  const fileDrop  = document.getElementById('faceUploadDrop');
+  const preview   = document.getElementById('faceUploadPreview');
+  const msgEl     = document.getElementById('faceUploadMsg');
+  const submitBtn = document.getElementById('faceUploadSubmit');
+
+  const label = emp.employee_name || emp.employee_id;
+  title.textContent = `إضافة صورة — ${label}`;
+  info.innerHTML = `
+    <div class="face-upload-emp-name">${esc(label)}</div>
+    <div class="face-upload-emp-meta">
+      <span class="face-tag">${esc(emp.employee_id)}</span>
+      <span class="face-tag">${esc(emp.company)}</span>
+      <span class="face-tag">${esc(emp.branch)}</span>
+    </div>`;
+
+  fileInput.value = '';
+  fileName.textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
+  fileDrop.classList.remove('active');
+  preview.classList.add('hidden');
+  preview.src = '';
+  hideMsg(msgEl);
+  submitBtn.disabled = false;
+
+  modal.classList.remove('hidden');
+}
+
+function closeFaceUploadModal() {
+  document.getElementById('faceUploadModal')?.classList.add('hidden');
+  _faceUploadTarget = null;
+}
+
+async function submitFaceUploadModal() {
+  const emp = _faceUploadTarget;
+  if (!emp) return;
+
+  const fileInput = document.getElementById('faceUploadPicture');
+  const msgEl     = document.getElementById('faceUploadMsg');
+  const submitBtn = document.getElementById('faceUploadSubmit');
+  const file      = fileInput?.files[0];
+
+  hideMsg(msgEl);
+  if (!file) return showMsg(msgEl, 'error', 'يرجى اختيار صورة');
+
+  submitBtn.disabled = true;
+  const fd = new FormData();
+  fd.append('employee_id', emp.employee_id);
+  fd.append('branch',      emp.branch);
+  fd.append('company',     emp.company);
+  fd.append('picture',     file);
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    if (res.status === 401) { showLogin(); return; }
+    const data = await res.json();
+
+    if (res.ok) {
+      showMsg(msgEl, 'success', data.message || 'تم رفع الصورة بنجاح');
+      fileInput.value = '';
+      document.getElementById('faceUploadFileName').textContent = 'اسحب الصورة هنا أو اضغط للاختيار';
+      document.getElementById('faceUploadDrop').classList.remove('active');
+      const preview = document.getElementById('faceUploadPreview');
+      preview.classList.add('hidden');
+      preview.src = '';
+      await refreshFaceRow(emp.employee_id);
+      const hr = findEmployee(emp.employee_id);
+      if (hr && !hr.registered_branch) hr.registered_branch = emp.branch;
+    } else {
+      showMsg(msgEl, 'error', data.error || 'حدث خطأ غير متوقع');
+    }
+  } catch {
+    showMsg(msgEl, 'error', 'تعذّر الاتصال بالخادم');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+async function refreshFaceRow(employeeId) {
+  try {
+    const r = await fetch('/api/saved-faces');
+    if (!r.ok) return;
+    const data = await r.json();
+    const emp  = data.find(e => e.employee_id === employeeId);
+    if (!emp) return;
+
+    const idx = _facesRows.findIndex(e => e.employee_id === employeeId);
+    if (idx >= 0) _facesRows[idx] = emp;
+    else _facesRows.push(emp);
+
+    const old = document.querySelector(`.face-row[data-id="${CSS.escape(employeeId)}"]`);
+    if (!old) return;
+    const fresh = buildFaceRow(emp);
+    old.replaceWith(fresh);
+    applyFacesFilter();
+    refreshFacesStatsFromDom();
+  } catch { /* ignore */ }
+}
 
 async function loadFacesList() {
   const list  = document.getElementById('facesList');
@@ -1187,16 +1286,7 @@ function buildFaceRow(emp) {
     </div>
     <div class="face-photos-grid">${photoCards}</div>`;
 
-  row.querySelector('.face-add-btn').addEventListener('click', () => {
-    const hr = findEmployee(emp.employee_id) || {
-      employee_id:       emp.employee_id,
-      employee_name:       emp.employee_name,
-      company:             emp.company,
-      branch:              emp.branch,
-      registered_branch:   emp.branch
-    };
-    selectEmployeeForUpload(hr);
-  });
+  row.querySelector('.face-add-btn').addEventListener('click', () => openFaceUploadModal(emp));
 
   row.querySelector('.face-del-all-btn').addEventListener('click', () => deleteAllFaces(emp, row));
 

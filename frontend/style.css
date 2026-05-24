@@ -981,6 +981,36 @@ input[type="file"] { display: none; }
   width: 100%;
 }
 
+.face-upload-box {
+  width: 100%;
+  max-width: 440px;
+}
+
+.face-upload-body {
+  padding: 1.25rem 1.4rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.face-upload-emp {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+
+.face-upload-emp-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.face-upload-emp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+
 #streamFrame {
   width: 100%;
   height: min(62vh, 560px);
